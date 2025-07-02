@@ -1,0 +1,228 @@
+package com.example.pixvi.viewModels
+
+
+import android.util.Log
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.fromHtml
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.pixvi.network.BookmarkRestrict
+import com.example.pixvi.network.api.PixivApiService
+import com.example.pixvi.network.response.Home.Novels.Novel
+import com.example.pixvi.network.response.Home.Novels.NovelForDisplay
+import com.example.pixvi.network.response.Home.Novels.RankingNovel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import retrofit2.HttpException
+
+class HomeNovelViewModel(
+    private val pixivApiService: PixivApiService
+) : ViewModel() {
+
+    data class NovelUiState(
+        val isLoading: Boolean = false,
+        val recommendations: List<NovelForDisplay> = emptyList(),
+        val rankingNovel: List<RankingNovel> = emptyList(),
+        val nextUrl: String? = null,
+        val isLoadingMore: Boolean = false,
+        val errorMessage: String? = null
+    )
+
+    private val _uiState = MutableStateFlow(NovelUiState())
+    val uiState: StateFlow<NovelUiState> = _uiState.asStateFlow()
+
+    private fun Novel.toNovelForDisplay(): NovelForDisplay {
+
+        val parsedAnnotatedString = AnnotatedString.Companion.fromHtml(this.caption)
+
+        return NovelForDisplay(
+            id = this.id,
+            title = this.title,
+            user = this.user,
+            image_urls = this.image_urls,
+            caption = this.caption,
+            page_count = this.page_count,
+            text_length = this.text_length,
+            total_view = this.total_view,
+            total_bookmarks = this.total_bookmarks,
+            total_comments = this.total_comments,
+            is_bookmarked = this.is_bookmarked,
+            tags = this.tags,
+            parsedCaption = parsedAnnotatedString // The result of the parsing is stored here
+        )
+    }
+
+    /**
+     * Fetch the initial set of recommendations.
+     * Headers are now handled by the Interceptor, no need to pass them here.
+     */
+    fun loadInitialRecommendations() {
+
+
+        if (_uiState.value.recommendations.isNotEmpty() || _uiState.value.isLoading) {
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                val response = pixivApiService.getRecommendedNovel()
+
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body != null) {
+                        val novelsFromNetwork = body.novels ?: emptyList()
+                        val novelsForDisplay = novelsFromNetwork.map { it.toNovelForDisplay() }
+
+                        _uiState.update {
+
+                            it.copy( // Using `it.copy` to avoid resetting other state fields
+                                isLoading = false,
+                                recommendations = novelsForDisplay,
+                                rankingNovel = body.ranking_novels ?: emptyList(),
+                                nextUrl = body.next_url
+                            )
+                        }
+                    } else {
+                        _uiState.update { it.copy(isLoading = false, errorMessage = "Received empty response") }
+                    }
+                } else {
+                    val errorMsg = "API Error ${response.code()}: ${response.message()}"
+                    _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Error: ${e.message}") }
+            }
+        }
+    }
+
+    /**
+     * Fetch additional recommendations (pagination).
+     * Headers are handled by the Interceptor.
+     */
+    fun loadMoreRecommendations() {
+        val currentNextUrl = _uiState.value.nextUrl
+        // Check if there's a next page URL and if we're not already loading more or initial data.
+        if (currentNextUrl == null || _uiState.value.isLoadingMore || _uiState.value.isLoading) {
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true, errorMessage = null) } // Clear previous errors on new attempt
+            try {
+                val response = pixivApiService.getNextNovel(currentNextUrl)
+
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    if (body?.novels != null) {
+                        // Append new items and update next URL
+                        val newNovelsFromNetwork = body.novels
+                        val newNovelsForDisplay = newNovelsFromNetwork.map { it.toNovelForDisplay() }
+                        _uiState.update { currentState ->
+                            currentState.copy(
+                                recommendations = currentState.recommendations + newNovelsForDisplay,
+                                nextUrl = body.next_url,
+                                isLoadingMore = false
+                            )
+                        }
+                    } else {
+                        // Handle successful response but null body or null novel
+                        // Keep the current nextUrl, stop loading more
+                        _uiState.update { it.copy(isLoadingMore = false, errorMessage = if (body == null) "Received empty response" else "No more novels found") }
+                    }
+                } else {
+                    // Handle HTTP error for pagination
+                    val errorMsg = "API Error ${response.code()}: ${response.message()}"
+                    _uiState.update { it.copy(isLoadingMore = false, errorMessage = errorMsg) }
+                }
+
+            } catch (e: kotlinx.io.IOException) {
+                _uiState.update { it.copy(isLoadingMore = false, errorMessage = "Network Error: ${e.message}") }
+            } catch (e: HttpException) {
+                _uiState.update { it.copy(isLoadingMore = false, errorMessage = "HTTP Error: ${e.message}") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingMore = false, errorMessage = "Error: ${e.message}") }
+            }
+        }
+    }
+
+    fun toggleBookmark(illustId: Long, isCurrentlyBookmarked: Boolean, visibility: BookmarkRestrict) {
+        viewModelScope.launch {
+            //Calling the api based on visibility,
+
+            val response: retrofit2.Response<Unit>
+
+            if (!isCurrentlyBookmarked) { //the image is not bookmarked
+                try{
+                    if(visibility == BookmarkRestrict.PUBLIC){
+                        response = pixivApiService.addBookmarkNovel(illustId = illustId, restrict = "public")
+                    }
+                    else{
+                        response = pixivApiService.addBookmarkNovel(illustId = illustId, restrict = "private")
+                    }
+
+                    if(response.isSuccessful){
+                        updateNovelBookmarkStateInList(illustId, newBookmarkState = true)
+                        Log.e("Bookmark", "Done")
+                    }
+                    else{
+                        Log.e("Bookmark", "Failed to add bookmark. Code: ${response.code()}, Message: ${response.message()}")
+                        //add a toast later
+                    }
+                }catch (e: Exception){
+                    Log.e("Bookmark", "Network error while adding bookmark: $e")
+                    //add a toast later
+                }
+            }
+            else{
+                try{
+                    response = pixivApiService.deleteBookmarkNovel(illustId = illustId)
+                    if (response.isSuccessful){
+                        updateNovelBookmarkStateInList(illustId, newBookmarkState = false)
+                        Log.e("Bookmark", "Done")
+                    }
+                }catch (e: Exception){
+                    Log.e("Bookmark", "Network error while adding bookmark: $e")
+                }
+            }
+        }
+    }
+
+    private fun updateNovelBookmarkStateInList(illustId: Long, newBookmarkState: Boolean) {
+        _uiState.update { currentState ->
+            val updatedRecommendations = currentState.recommendations.map { novel  ->
+                // Search for the correct novel by its stable ID
+                if (novel .id.toLong() == illustId) {
+                    // Create a new copy of the novel with the updated value for is_bookmarked and the total_bookmarks
+                    novel .copy(
+                        is_bookmarked = newBookmarkState,
+                        total_bookmarks = if (newBookmarkState) novel .total_bookmarks + 1 else novel .total_bookmarks - 1
+                    )
+                } else {
+                    // Leave all other novel unchanged
+                    novel
+                }
+            }
+            // Return a new copy of the UI state containing the new list
+            currentState.copy(recommendations = updatedRecommendations)
+        }
+    }
+
+}
+
+class HomeNovelViewModelFactory(
+    private val pixivApiService: PixivApiService
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(HomeNovelViewModel::class.java)) {
+            // Pass the PixivApiService to the ViewModel constructor
+            return HomeNovelViewModel(pixivApiService) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}

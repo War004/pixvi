@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory android:title="Account Settings">
+        <Preference
+            android:key="logout"
+            android:title="Logout"
+            android:summary="Sign out of your Pixiv account" />
+    </PreferenceCategory>
+</PreferenceScreen>
