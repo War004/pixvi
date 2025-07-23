@@ -39,6 +39,15 @@ import androidx.lifecycle.lifecycleScope
 import com.example.pixvi.viewModels.HomeIllustViewModel
 import com.example.pixvi.viewModels.MangaViewModel
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.padding
+import com.example.pixvi.screens.InteractiveFloatingToolbar
+import com.example.pixvi.screens.detail.DetailNovel
+import com.example.pixvi.screens.homeScreen.IllustrationsScreen
+import com.example.pixvi.screens.homeScreen.MangaScreen
+import com.example.pixvi.screens.homeScreen.NewestScreen
+import com.example.pixvi.screens.homeScreen.NovelHomeScreen
+import com.example.pixvi.screens.homeScreen.RankingScreen
+import com.example.pixvi.utils.ContentRoutes
 import com.example.pixvi.viewModels.HomeNovelViewModel
 import com.example.pixvi.viewModels.HomeNovelViewModelFactory
 import kotlinx.coroutines.launch
@@ -61,7 +70,10 @@ class MainActivity : ComponentActivity() {
         MangaViewModelFactory(RetrofitClient.apiService)
     }
     private val homeINovelViewModel: HomeNovelViewModel by viewModels {
-        HomeNovelViewModelFactory(RetrofitClient.apiService)
+        HomeNovelViewModelFactory(
+            application = application,
+            pixivApiService = RetrofitClient.apiService
+        )
     }
 
     companion object {
@@ -75,25 +87,18 @@ class MainActivity : ComponentActivity() {
 
         var uiState: UiState by mutableStateOf(UiState.Loading)
 
-        // This lifecycleScope now becomes the SINGLE SOURCE OF TRUTH
-        // for determining the initial screen.
         lifecycleScope.launch {
-            val destination = if (hasSavedToken(this@MainActivity)) "MainAppShell" else "LoginScreen"
-            //log
+            // MODIFIED: Start destination is now the default content route, not the shell
+            val destination = if (hasSavedToken(this@MainActivity)) ContentRoutes.ILLUSTRATIONS else "LoginScreen"
             Log.d(TAG, "Initial destination determined: $destination")
             uiState = UiState.Success(destination)
         }
 
-        // The splash screen correctly waits until the state is no longer Loading.
         splashScreen.setKeepOnScreenCondition {
-            val isLoading = uiState is UiState.Loading
-            Log.d(TAG, "Splash screen condition: isLoading = $isLoading")
             uiState is UiState.Loading
         }
 
         authViewModel = ViewModelProvider(this)[AuthViewModel::class.java]
-        Log.d(TAG, "AuthViewModel created/retrieved: ${authViewModel.hashCode()}")
-
         authViewModel.initialize(this)
         RetrofitClient.initialize(authViewModel)
 
@@ -104,39 +109,16 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            Log.d(TAG, "setContent called - Composing UI")
             PixviTheme {
                 val currentUiState = uiState
-                // --- FIX: We only compose the UI AFTER the initial state is determined ---
                 if (currentUiState is UiState.Success) {
                     val rootNavController = rememberNavController()
-
-                    Log.d(TAG, "RootNavController created: ${rootNavController.hashCode()}")
-
-
-                    Log.d(TAG, "RootNavController created: ${rootNavController.hashCode()}")
                     val loginState by authViewModel.loginState.collectAsState()
-                    Log.d(TAG, "Login state: $loginState")
-
-                    // This effect correctly handles navigating from Login -> MainAppShell
-                    LaunchedEffect(loginState) {
-                        Log.d(TAG, "LaunchedEffect for loginState triggered: $loginState")
-                        if (rootNavController.currentDestination?.route != "MainAppShell") {
-                            Log.d(TAG, "Navigating to MainAppShell due to successful login")
-                            rootNavController.navigate("MainAppShell") {
-                                popUpTo(rootNavController.graph.startDestinationId) { inclusive = true }
-                            }
-                        } else {
-                            Log.d(TAG, "Already on MainAppShell. No navigation needed.")
-                        }
-                    }
 
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        // --- FIX: The startDestination is now a STABLE value from the UiState ---
-                        // It is no longer recalculated on every recomposition.
                         NavHost(
                             navController = rootNavController,
-                            startDestination = currentUiState.startDestination, // Use the stable value
+                            startDestination = currentUiState.startDestination,
                             modifier = Modifier.fillMaxSize()
                         ) {
                             Log.d(TAG, "NavHost startDestination: ${currentUiState.startDestination}")
@@ -150,23 +132,73 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            composable(route = "MainAppShell") {
-                                Log.d(TAG, "Composing MainAppShell")
-                                MainAppShell(
-                                    authViewModel = authViewModel,
-                                    rootNavController = rootNavController,
-                                    viewModels = appViewModels
-                                )
+                            // REMOVED: The single composable for "MainAppShell" is gone.
+
+                            // ADDED: Individual routes for each content screen, wrapped in the shell.
+                            composable(ContentRoutes.ILLUSTRATIONS) {
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                    IllustrationsScreen(
+                                        modifier = Modifier.padding(padding),
+                                        navController = rootNavController,
+                                        homeIllustViewModel = appViewModels.homeIllustViewModel
+                                    )
+                                }
                             }
 
-                            // Other screens...
+                            composable(ContentRoutes.MANGA) {
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                    MangaScreen(
+                                        modifier = Modifier.padding(padding),
+                                        navController = rootNavController,
+                                        mangaViewModel = appViewModels.mangaViewModel
+                                    )
+                                }
+                            }
+
+                            composable(ContentRoutes.NOVEL) {
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                    NovelHomeScreen(
+                                        modifier = Modifier.padding(padding),
+                                        navController = rootNavController,
+                                        homeINovelViewModel = appViewModels.homeINovelViewModel
+                                    )
+                                }
+                            }
+
+                            composable(ContentRoutes.NEWEST) {
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                    NewestScreen(
+                                        //modifier = Modifier.padding(padding),
+                                        navController = rootNavController
+                                    )
+                                }
+                            }
+
+                            composable(ContentRoutes.RANKING) {
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                    RankingScreen(
+                                        //modifier = Modifier.padding(padding),
+                                        navController = rootNavController
+                                    )
+                                }
+                            }
+
+
+                            // Other screens remain as they are.
                             composable<FullImageScreen> { backStackEntry ->
                                 val args = backStackEntry.toRoute<FullImageScreen>()
                                 FullScreenImage(
                                     illustId = args.illustId,
                                     initialPageIndex = args.initialPageIndex,
                                     originalImageUrls = args.originalImageUrls,
-                                    userAgent = args.userAgent
+                                )
+                            }
+                            composable<NovelDetailScreen>{backStackEntry ->
+                                val args = backStackEntry.toRoute<NovelDetailScreen>()
+                                DetailNovel(
+                                    novelId = args.novelId,
+                                    navController = rootNavController,
+                                    pixivApiService = RetrofitClient.apiService
                                 )
                             }
 
@@ -180,13 +212,13 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                // When uiState is Loading, NOTHING is composed, and the splash screen remains visible.
             }
         }
         handleIntent(intent)
         Log.d(TAG, "onCreate completed")
     }
 
+    // ... (rest of MainActivity remains the same)
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -248,12 +280,15 @@ data class FullImageScreen(
     val illustId: Int,
     val initialPageIndex: Int,
     val originalImageUrls: List<String>,
-    val userAgent: String
+)
+
+@Serializable
+data class NovelDetailScreen(
+    val novelId: Int
 )
 
 data class AppViewModels(
     val homeIllustViewModel: HomeIllustViewModel,
     val mangaViewModel: MangaViewModel,
     val homeINovelViewModel: HomeNovelViewModel
-    // val novelViewModel: NovelViewModel, etc.
 )

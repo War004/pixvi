@@ -86,15 +86,19 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
+import coil.imageLoader
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.network.response.Home.Manga.RankingIllust
 import com.example.pixvi.screens.FloatingImageInfoToolbar
+import com.example.pixvi.utils.NormalImageRequest
+import com.example.pixvi.utils.PixivAsyncImage
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 
 @OptIn(FlowPreview::class)
 @Composable
 fun MangaScreen(
+    modifier: Modifier,
     navController: NavController,
     mangaViewModel: MangaViewModel
 ) {
@@ -179,7 +183,7 @@ fun MangaScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
@@ -350,27 +354,10 @@ private fun CarouselItemScope.CarouselMangaItem(
     navController: NavController,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val appVersion = "7.14.0"
-    val userAgent = "PixivAndroidApp/$appVersion (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
-    val commonHeaders = remember {
-        Headers.Builder()
-            .add("Referer", "https://app-api.pixiv.net/")
-            .add("User-Agent", userAgent)
-            .build()
-    }
 
+    val context = LocalContext.current
     val imageUrl = illust.image_urls.medium
 
-    val imageRequest = remember(imageUrl) {
-        ImageRequest.Builder(context)
-            .data(imageUrl)
-            .crossfade(true)
-            .headers(commonHeaders)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .build()
-    }
     Box(
         modifier = modifier
             .fillMaxHeight()
@@ -388,7 +375,6 @@ private fun CarouselItemScope.CarouselMangaItem(
                             illustId = illust.id,
                             initialPageIndex = 0,
                             originalImageUrls = allOriginalUrls,
-                            userAgent = userAgent
                         )
                     )
                 } else {
@@ -398,11 +384,11 @@ private fun CarouselItemScope.CarouselMangaItem(
                 }
             }
     ) {
-        AsyncImage(
-            model = imageRequest,
+        PixivAsyncImage(
+            imageUrl = imageUrl,
             contentDescription = illust.title,
+            modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
         )
 
         Text(
@@ -436,13 +422,42 @@ fun MangaItemRow(
     val isMultiPage = mangaIllust.page_count > 1 && mangaIllust.meta_pages.isNotEmpty()
     val pageCount = if (isMultiPage) mangaIllust.meta_pages.size else mangaIllust.page_count
 
-    val appVersion = "7.14.0"
-    val userAgent = "PixivAndroidApp/$appVersion (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
-    val commonHeaders = remember {
-        Headers.Builder()
-            .add("Referer", "https://app-api.pixiv.net/")
-            .add("User-Agent", userAgent)
-            .build()
+    val imageLoadStates = remember { mutableStateMapOf<Int, Boolean>() } //image states for showing the bottom sheet
+
+    val createImageRequestListener = remember {
+        { pageIndex: Int ->
+            object : ImageRequest.Listener {
+                override fun onStart(request: ImageRequest) {
+                    // When a new image starts loading, mark it as not loaded.
+                    imageLoadStates[pageIndex] = false
+                }
+                override fun onSuccess(request: ImageRequest, result: SuccessResult) {
+                    // When it succeeds, mark it as loaded.
+                    imageLoadStates[pageIndex] = true
+                }
+                override fun onError(request: ImageRequest, result: ErrorResult) {
+                    // On error, mark it as not loaded.
+                    imageLoadStates[pageIndex] = false
+                }
+            }
+        }
+    }
+
+    val getDisplayedUrl = { pageIndex: Int ->
+        if (isMultiPage) {
+            val page = mangaIllust.meta_pages.getOrNull(pageIndex)
+            page?.image_urls?.large ?: page?.image_urls?.medium
+        } else {
+            mangaIllust.image_urls.large ?: mangaIllust.image_urls.medium
+        }
+    }
+
+    val getOriginalUrl = { pageIndex: Int ->
+        if (isMultiPage) {
+            mangaIllust.meta_pages.getOrNull(pageIndex)?.image_urls?.original
+        } else {
+            mangaIllust.meta_single_page.original_image_url
+        }
     }
 
     val aspectRatio = if (mangaIllust.width > 0 && mangaIllust.height > 0) {
@@ -453,42 +468,7 @@ fun MangaItemRow(
     var showMenuSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    // Use LruCache for bitmap caching with a reasonable size limit
-    val bitmapCache = remember {
-        object {
-            private val cache = LruCache<Int, Bitmap>(100) // Cache last 100 pages (manga can have more pages)
-
-            fun put(pageIndex: Int, bitmap: Bitmap) {
-                cache.put(pageIndex, bitmap)
-            }
-
-            fun get(pageIndex: Int): Bitmap? = cache.get(pageIndex)
-        }
-    }
-
     val notificationViewModel: NotificationViewModel = viewModel()
-    val gson = remember { Gson() }
-
-    // Create a function that returns a page-specific listener
-    val createImageRequestListener = remember {
-        { pageIndex: Int ->
-            object : ImageRequest.Listener {
-                override fun onSuccess(request: ImageRequest, result: SuccessResult) {
-                    val drawable = result.drawable
-                    if (drawable is BitmapDrawable) {
-                        bitmapCache.put(pageIndex, drawable.bitmap)
-                        Log.d("MangaItemRow", "Bitmap cached for page $pageIndex for URL: ${request.data}")
-                    } else {
-                        Log.w("MangaItemRow", "Drawable is not a BitmapDrawable for URL: ${request.data}")
-                    }
-                }
-
-                override fun onError(request: ImageRequest, result: ErrorResult) {
-                    Log.e("MangaItemRow", "Error loading image for page $pageIndex: ${result.throwable.message}")
-                }
-            }
-        }
-    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -517,7 +497,6 @@ fun MangaItemRow(
                                     illustId = mangaIllust.id,
                                     initialPageIndex = currentPageIndex,
                                     originalImageUrls = allOriginalUrls,
-                                    userAgent = userAgent
                                 )
                             )
                         } else {
@@ -528,7 +507,7 @@ fun MangaItemRow(
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0
                         Log.d("MangaItemRow", "Long press on page $currentPageIndex")
 
-                        if (bitmapCache.get(currentPageIndex) != null) {
+                        if (imageLoadStates[currentPageIndex] == true) {
                             showMenuSheet = true
                         } else {
                             Log.d("MangaItemRow", "Long press ignored: Image not loaded yet for page $currentPageIndex")
@@ -548,20 +527,13 @@ fun MangaItemRow(
                         ?: page?.image_urls?.medium
                         ?: mangaIllust.image_urls.medium
 
-                    // Create a page-specific listener
-                    val pageSpecificListener = remember(pageIndex) {
-                        createImageRequestListener(pageIndex)
+                    val imageRequest = NormalImageRequest.normalImageRequest(context, imageUrl ?: "") { builder ->
+                        builder.listener(createImageRequestListener(pageIndex))
                     }
 
+                    // 4. Use the standard `AsyncImage`, NOT your PixivAsyncImage.
                     AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(imageUrl)
-                            .crossfade(true)
-                            .headers(commonHeaders)
-                            .diskCachePolicy(CachePolicy.ENABLED)
-                            .memoryCachePolicy(CachePolicy.ENABLED)
-                            .listener(pageSpecificListener)
-                            .build(),
+                        model = imageRequest,
                         contentDescription = "$title (Page ${pageIndex + 1})",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
@@ -570,25 +542,17 @@ fun MangaItemRow(
             } else { // Single Page
                 val imageUrl = mangaIllust.image_urls.large ?: mangaIllust.image_urls.medium
 
-                // For single page, use page index 0
-                val singlePageListener = remember { createImageRequestListener(0) }
-
+                val imageRequest = NormalImageRequest.normalImageRequest(context, imageUrl ?: "") { builder ->
+                    builder.listener(createImageRequestListener(0))
+                }
                 AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .headers(commonHeaders)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .memoryCachePolicy(CachePolicy.ENABLED)
-                        .listener(singlePageListener)
-                        .build(),
+                    model = imageRequest,
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
 
-            // --- "Series" Badge ---
             if (mangaIllust.series == null) {
                 Card(
                     modifier = Modifier
@@ -655,7 +619,7 @@ fun MangaItemRow(
                             }
 
                             try {
-                                val bitmap = ImageUtils.loadBitmapFromUrl(context, originalImageUrl, commonHeaders)
+                                val bitmap = ImageUtils.loadBitmapFromUrl(context, originalImageUrl)
                                 if (bitmap != null) {
                                     launch(Dispatchers.IO) {
                                         ImageUtils.saveBitmapToMediaStore(
@@ -681,66 +645,59 @@ fun MangaItemRow(
                         }
 
                         SaveDestination.Clipboard -> {
-                            // Try to use cached bitmap for the current page
-                            val currentBitmap = bitmapCache.get(currentPageIndex)
-                            if (currentBitmap != null) {
-                                try {
-                                    ImageUtils.copyBitmapToClipboardViaCache(
-                                        context = context,
-                                        bitmap = currentBitmap,
-                                        illustId = mangaIllust.id,
-                                        pageIndex = currentPageIndex
-                                    )
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Copied displayed image to clipboard", Toast.LENGTH_SHORT).show()
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("MangaItemRow", "Error copying to clipboard: ${e.message}", e)
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Error copying: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            } else {
-                                // Fallback to loading from original URL
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Loading original to copy...", Toast.LENGTH_SHORT).show()
-                                }
+                            val currentPageIndex = pagerState.currentPage
 
-                                val originalImageUrl: String? = if (isMultiPage) {
-                                    mangaIllust.meta_pages.getOrNull(currentPageIndex)?.image_urls?.original
-                                } else {
-                                    mangaIllust.meta_single_page.original_image_url
-                                }
+                            // --- Fast Path ---
+                            val displayedImageUrl = getDisplayedUrl(currentPageIndex)
+                            var copiedFromCache = false
 
+                            if (displayedImageUrl != null) {
+                                val cacheKey = coil.memory.MemoryCache.Key(displayedImageUrl)
+
+                                // Safely check Coil's memory cache
+                                context.imageLoader.memoryCache?.let { cache ->
+                                    val cachedBitmap = cache[cacheKey]?.bitmap
+                                    if (cachedBitmap != null) {
+                                        try {
+                                            ImageUtils.copyBitmapToClipboardViaCache(
+                                                context,
+                                                cachedBitmap,
+                                                mangaIllust.id,
+                                                currentPageIndex
+                                            )
+                                            Toast.makeText(context, "Copied displayed image", Toast.LENGTH_SHORT).show()
+                                            copiedFromCache = true
+                                        } catch (e: Exception) {
+                                            Log.e("MangaItemRow", "Error copying from cache", e)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // --- Fallback Path ---
+                            if (!copiedFromCache) {
+                                val originalImageUrl = getOriginalUrl(currentPageIndex)
                                 if (originalImageUrl == null) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Original URL not found for copying", Toast.LENGTH_SHORT).show()
-                                    }
+                                    Toast.makeText(context, "Original URL not found", Toast.LENGTH_SHORT).show()
                                     return@launch
                                 }
 
                                 try {
-                                    val bitmapToCopy = ImageUtils.loadBitmapFromUrl(context, originalImageUrl, commonHeaders)
+                                    val bitmapToCopy = ImageUtils.loadBitmapFromUrl(context, originalImageUrl)
                                     if (bitmapToCopy != null) {
                                         ImageUtils.copyBitmapToClipboardViaCache(
-                                            context = context,
-                                            bitmap = bitmapToCopy,
-                                            illustId = mangaIllust.id,
-                                            pageIndex = currentPageIndex
+                                            context,
+                                            bitmapToCopy,
+                                            mangaIllust.id,
+                                            currentPageIndex
                                         )
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(context, "Copied original image to clipboard", Toast.LENGTH_SHORT).show()
-                                        }
+                                        Toast.makeText(context, "Copied original image", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(context, "Failed to load image for copying", Toast.LENGTH_SHORT).show()
-                                        }
+                                        Toast.makeText(context, "Failed to load image for copying", Toast.LENGTH_SHORT).show()
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("MangaItemRow", "Error loading original for clipboard: ${e.message}", e)
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Error copying: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
+                                    Log.e("MangaItemRow", "Error copying original", e)
+                                    Toast.makeText(context, "Error copying: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -753,17 +710,13 @@ fun MangaItemRow(
                     if (format == SaveAllFormat.Pdf && isMultiPage) {
                         val originalImageUrlsList = mangaIllust.meta_pages.mapNotNull { it.image_urls.original }
                         if (originalImageUrlsList.size == mangaIllust.page_count) {
-                            val headersMap = mapOf(
-                                "Referer" to "https://app-api.pixiv.net/",
-                                "User-Agent" to userAgent
-                            )
+
                             notificationViewModel.initiateAndTrackPdfExport(
                                 illustId = mangaIllust.id,
                                 illustTitle = mangaIllust.title,
                                 totalPages = mangaIllust.page_count,
                                 originalImageUrls = originalImageUrlsList,
-                                originalHeadersJson = gson.toJson(headersMap)
-                            )
+                                )
                             Toast.makeText(context, "PDF creation started for manga.", Toast.LENGTH_LONG).show()
                         } else {
                             Toast.makeText(context, "Could not get all original URLs for PDF.", Toast.LENGTH_SHORT).show()
@@ -777,11 +730,6 @@ fun MangaItemRow(
         )
     }
 }
-
-// You'll need these helper functions (formatCount, formatDateString) and composables
-// (CircularPageProgressIndicator, SmallInfoIconText, MaterialBottomSheetOptionsMenu)
-// available in this scope, either by defining them here or importing them if they are in a shared file.
-// For brevity, I'm assuming they are accessible.
 
 
 

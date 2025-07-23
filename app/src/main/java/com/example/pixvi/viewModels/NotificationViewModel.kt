@@ -58,7 +58,7 @@ data class NotificationInfoUi(
     val message: String,
     val timestamp: String,
     val actionText: String?,       // Primary action
-    val secondaryActionText: String?, //For outlined button
+    val secondaryActionText: String?, //For outlined | but it is the deserved action that should happen
     val deepLinkUrl: String? = null,
     val isDismissible: Boolean,
     val taskStatus: String? = null // Useful for UI logic beyond just actionText
@@ -88,7 +88,6 @@ data class NotificationEntity(
 
     // --- NEW: Fields for Retry Functionality for PDF Export Jobs ---
     val originalImageUrlsJson: String? = null, // JSON string array of original image URLs
-    val originalHeadersJson: String? = null    // JSON string of original headers map
 )
 
 // --- Enum for Task Statuses ---
@@ -212,7 +211,6 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
         illustTitle: String,
         totalPages: Int,
         imageUrls: List<String>, // Pass the actual list of URLs
-        headersJson: String,     // Pass the headers JSON string
         isRetry: Boolean = false // Optional flag for logging or different tags
     ) {
         if (imageUrls.isEmpty()) {
@@ -227,7 +225,6 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
             .putString(PdfExportWorker.KEY_ILLUST_TITLE, illustTitle)
             .putInt(PdfExportWorker.KEY_TOTAL_PAGES, totalPages)
             .putStringArray(PdfExportWorker.KEY_IMAGE_URLS, imageUrls.toTypedArray())
-            .putString(PdfExportWorker.KEY_HEADERS_JSON, headersJson)
             .build()
 
         val constraints = Constraints.Builder()
@@ -424,7 +421,6 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
 
             if (notification?.type == "pdf_export_job" && notification.taskStatus == TaskStatus.FAILED) {
                 if (notification.originalImageUrlsJson.isNullOrEmpty() ||
-                    notification.originalHeadersJson.isNullOrEmpty() ||
                     notification.taskIllustId == null ||
                     notification.taskTitle == null ||
                     notification.progressMax == null) {
@@ -460,7 +456,6 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
                     illustTitle = notification.taskTitle,
                     totalPages = notification.progressMax,
                     imageUrls = originalImageUrlsList, // Pass deserialized list
-                    headersJson = notification.originalHeadersJson, // Pass stored headers JSON
                     isRetry = true
                 )
 
@@ -476,7 +471,6 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
         illustTitle: String,
         totalPages: Int,
         originalImageUrls: List<String>, // Now takes the List<String> directly
-        originalHeadersJson: String,
         authorName: String = "PDF Export Service"
     ): Long {
         val initialMessage = "Preparing PDF for '$illustTitle'..."
@@ -501,7 +495,6 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
             progressMax = totalPages,
             taskPayload = null, // Explicitly null
             originalImageUrlsJson = originalImageUrlsJsonToStore,
-            originalHeadersJson = originalHeadersJson
         )
         val notificationJobId = notificationDao.insertNotification(notification)
         Log.d("NotificationVM", "Initiated PDF export job ID: $notificationJobId for illust: $illustTitle")
@@ -512,7 +505,6 @@ class NotificationViewModel(application: Application) : AndroidViewModel(applica
             illustTitle = illustTitle,
             totalPages = totalPages,
             imageUrls = originalImageUrls,
-            headersJson = originalHeadersJson,
             isRetry = false
         )
         return notificationJobId

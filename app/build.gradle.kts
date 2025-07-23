@@ -39,13 +39,9 @@ android {
             )
         }
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
     kotlin {
         compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+            jvmToolchain(11)
         }
     }
     buildFeatures {
@@ -66,6 +62,7 @@ dependencies {
     implementation (libs.androidx.work.runtime.ktx)
     // Room dependencies
     implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.media3.session)
     add("ksp", libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
 
@@ -117,11 +114,17 @@ dependencies {
     // Browser
     implementation(libs.androidx.browser)
 
-    // Image Loading
+    // Image Loading and animated images
     implementation(libs.coil.compose)
+    implementation("io.coil-kt:coil-gif:2.7.0") //libs.coil.gif is casing an error...
 
     //Extended Icons
     implementation(libs.androidx.material.icons.extended)
+
+    implementation("androidx.media3:media3-exoplayer:1.7.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.7.1")
+    implementation("androidx.media3:media3-ui:1.7.1")
+    implementation("androidx.media3:media3-ui-compose:1.7.1")
 
     //temp
     implementation(libs.logging.interceptor)

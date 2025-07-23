@@ -110,11 +110,15 @@ import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.carousel.CarouselItemScope
 import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.style.TextOverflow
 import coil.request.CachePolicy
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.screens.FloatingImageInfoToolbar
+import com.example.pixvi.utils.NormalImageRequest
+import com.example.pixvi.utils.PixivAsyncImage
 import com.example.pixvi.viewModels.HomeIllustViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -126,6 +130,7 @@ private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_p
 @OptIn(FlowPreview::class)
 @Composable
 fun IllustrationsScreen(
+    modifier: Modifier,
     navController: NavController,
     homeIllustViewModel: HomeIllustViewModel
 ) {
@@ -218,7 +223,7 @@ fun IllustrationsScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
@@ -389,27 +394,8 @@ private fun CarouselItemScope.CarouselIllustItem(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    // This logic is similar to PixivImageRow to ensure consistency
-    val appVersion = "7.14.0"
-    val userAgent = "PixivAndroidApp/$appVersion (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
-    val commonHeaders = remember {
-        Headers.Builder()
-            .add("Referer", "https://app-api.pixiv.net/")
-            .add("User-Agent", userAgent)
-            .build()
-    }
 
     val imageUrl = illust.image_urls.medium
-
-    val imageRequest = remember(imageUrl) {
-        ImageRequest.Builder(context)
-            .data(imageUrl)
-            .crossfade(true)
-            .headers(commonHeaders)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .build()
-    }
     Box(
         modifier = modifier
             .fillMaxHeight()
@@ -427,7 +413,6 @@ private fun CarouselItemScope.CarouselIllustItem(
                             illustId = illust.id,
                             initialPageIndex = 0, // Carousel items always start at the first page
                             originalImageUrls = allOriginalUrls,
-                            userAgent = userAgent
                         )
                     )
                 } else {
@@ -438,11 +423,11 @@ private fun CarouselItemScope.CarouselIllustItem(
             }
     ) {
         // The image serves as the background of the Box
-        AsyncImage(
-            model = imageRequest,
+        PixivAsyncImage(
+            imageUrl = imageUrl,
             contentDescription = illust.title,
+            modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
         )
 
         // The Text is aligned to the bottom-start of the parent Box, over the scrim
@@ -474,63 +459,20 @@ fun PixivImageRow(
 ) {
     val context = LocalContext.current
     val title = illust.title
-    val authorName = illust.user.name
     val isMultiPage = illust.page_count > 1 && illust.meta_pages.isNotEmpty()
     val pageCount = if (isMultiPage) illust.meta_pages.size else illust.page_count
 
-    // ... (Rest of the existing code like userAgent, headers, etc.)
-    val appVersion = "7.14.0"
-    val userAgent = "PixivAndroidApp/$appVersion (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
-    val commonHeaders = remember {
-        Headers.Builder()
-            .add("Referer", "https://app-api.pixiv.net/")
-            .add("User-Agent", userAgent)
-            .build()
-    }
+    val imageLoadStates = remember { mutableStateMapOf<Int, Boolean>() } //image states for showing the bottom sheet
 
     val aspectRatio = if (illust.width > 0 && illust.height > 0) {
         illust.width.toFloat() / illust.height.toFloat()
     } else { 2f / 3f }
 
     val pagerState = rememberPagerState(pageCount = { pageCount })
-    val formattedLikes = remember(illust.total_bookmarks) { formatCount(illust.total_bookmarks) }
-    val formattedViews = remember(illust.total_view) { formatCount(illust.total_view) }
-    val formattedDate = remember(illust.create_date) { formatDateString(illust.create_date) }
 
     var showMenuSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val bitmapCache = remember {
-        object {
-            private val cache = LruCache<Int, Bitmap>(25) // Cache last 25 pages
-
-            fun put(pageIndex: Int, bitmap: Bitmap) {
-                cache.put(pageIndex, bitmap)
-            }
-
-            fun get(pageIndex: Int): Bitmap? = cache.get(pageIndex)
-        }
-    }
     val notificationViewModel: NotificationViewModel = viewModel()
-    val gson = remember { Gson() }
-    val createImageRequestListener = remember {
-        { pageIndex: Int ->
-            object : ImageRequest.Listener {
-                override fun onSuccess(request: ImageRequest, result: SuccessResult) {
-                    val drawable = result.drawable
-                    if (drawable is BitmapDrawable) {
-                        bitmapCache.put(pageIndex, drawable.bitmap)
-                        Log.d("PixivImageRow", "Bitmap cached for page $pageIndex for URL: ${request.data}")
-                    } else {
-                        Log.w("PixivImageRow", "Drawable is not a BitmapDrawable for URL: ${request.data}")
-                    }
-                }
-
-                override fun onError(request: ImageRequest, result: ErrorResult) {
-                    Log.e("PixivImageRow", "Error loading image for page $pageIndex: ${result.throwable.message}")
-                }
-            }
-        }
-    }
     val getImageUrl = remember {
         { pageIndex: Int ->
             if (isMultiPage) {
@@ -579,7 +521,6 @@ fun PixivImageRow(
                                     illustId = illust.id,
                                     initialPageIndex = currentPageIndex,
                                     originalImageUrls = allOriginalUrls,
-                                    userAgent = userAgent
                                 )
                             )
                         } else {
@@ -591,7 +532,7 @@ fun PixivImageRow(
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0
                         Log.d("PixivImageRow", "Long press on page $currentPageIndex")
 
-                        if (bitmapCache.get(currentPageIndex) != null) {
+                        if (imageLoadStates[currentPageIndex] == true) {
                             showMenuSheet = true
                         } else {
                             Log.d("PixivImageRow", "Long press ignored: Image not loaded yet for page $currentPageIndex")
@@ -610,20 +551,18 @@ fun PixivImageRow(
                     ImageLoaderItem(
                         pageIndex = pageIndex,
                         getImageUrl = getImageUrl,
-                        createImageRequestListener = createImageRequestListener,
-                        commonHeaders = commonHeaders,
                         contentDescription = "$title (Page ${pageIndex + 1})",
-                        context = context
+                        context = context,
+                        imageLoadStates = imageLoadStates
                     )
                 }
             } else { // Single page image
                 ImageLoaderItem(
                     pageIndex = 0,
                     getImageUrl = getImageUrl,
-                    createImageRequestListener = createImageRequestListener,
-                    commonHeaders = commonHeaders,
                     contentDescription = title,
-                    context = context
+                    context = context,
+                    imageLoadStates = imageLoadStates
                 )
             }
 
@@ -669,7 +608,7 @@ fun PixivImageRow(
                             }
 
                             try {
-                                val bitmap = ImageUtils.loadBitmapFromUrl(context, originalImageUrl, commonHeaders)
+                                val bitmap = ImageUtils.loadBitmapFromUrl(context, originalImageUrl)
                                 if (bitmap != null) {
                                     launch(Dispatchers.IO) {
                                         ImageUtils.saveBitmapToMediaStore(
@@ -695,58 +634,60 @@ fun PixivImageRow(
                         }
 
                         SaveDestination.Clipboard -> {
-                            val currentBitmap = bitmapCache.get(currentPageIndex)
-                            if (currentBitmap != null) {
-                                try {
-                                    ImageUtils.copyBitmapToClipboardViaCache(
-                                        context = context,
-                                        bitmap = currentBitmap,
-                                        illustId = illust.id,
-                                        pageIndex = currentPageIndex
-                                    )
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Copied displayed image to clipboard", Toast.LENGTH_SHORT).show()
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("PixivImageRow", "Error copying to clipboard: ${e.message}", e)
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Error copying: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            } else {
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "Loading original to copy...", Toast.LENGTH_SHORT).show()
-                                }
+                            val currentPageIndex = pagerState.currentPage
+                            val displayedImageUrl = getImageUrl(currentPageIndex)
 
+                            var copiedFromCache = false
+                            if (displayedImageUrl != null) {
+                                val cacheKey = coil.memory.MemoryCache.Key(displayedImageUrl)
+
+                                // 3. Check Coil's memory cache for the bitmap
+                                context.imageLoader.memoryCache?.let { cache ->
+                                    val cachedBitmap = cache[cacheKey]?.bitmap
+                                    if (cachedBitmap != null) {
+                                        Log.d("FastCopy", "Found bitmap in Coil's memory cache.")
+                                        try {
+                                            ImageUtils.copyBitmapToClipboardViaCache(
+                                                context,
+                                                cachedBitmap,
+                                                illust.id,
+                                                currentPageIndex
+                                            )
+                                            Toast.makeText(context, "Copied displayed image", Toast.LENGTH_SHORT).show()
+                                            copiedFromCache = true
+                                        } catch (e: Exception) {
+                                            Log.e("FastCopy", "Error copying from cache", e)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 4. FALLBACK PATH: If not found in cache, download the original.
+                            if (!copiedFromCache) {
+                                Log.d("FastCopy", "Bitmap not in cache. Downloading original.")
                                 val originalImageUrl = getOriginalUrl(currentPageIndex)
-                                if (originalImageUrl == null) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Original URL not found for copying", Toast.LENGTH_SHORT).show()
-                                    }
-                                    return@launch
-                                }
 
-                                try {
-                                    val bitmapToCopy = ImageUtils.loadBitmapFromUrl(context, originalImageUrl, commonHeaders)
+                                if (originalImageUrl != null) {
+                                    // ... your existing logic to download and copy the original image ...
+                                    val bitmapToCopy = ImageUtils.loadBitmapFromUrl(context, originalImageUrl)
                                     if (bitmapToCopy != null) {
                                         ImageUtils.copyBitmapToClipboardViaCache(
-                                            context = context,
-                                            bitmap = bitmapToCopy,
-                                            illustId = illust.id,
-                                            pageIndex = currentPageIndex
+                                            context,
+                                            bitmapToCopy,
+                                            illust.id,
+                                            currentPageIndex
                                         )
                                         withContext(Dispatchers.Main) {
-                                            Toast.makeText(context, "Copied original image to clipboard", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Copied original image", Toast.LENGTH_SHORT).show()
                                         }
                                     } else {
                                         withContext(Dispatchers.Main) {
                                             Toast.makeText(context, "Failed to load image for copying", Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                } catch (e: Exception) {
-                                    Log.e("PixivImageRow", "Error loading original for clipboard: ${e.message}", e)
+                                } else {
                                     withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Error copying: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Original URL not found", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -771,11 +712,6 @@ fun PixivImageRow(
                                 return@launch
                             }
 
-                            val headersMap = mapOf(
-                                "Referer" to "https://app-api.pixiv.net/",
-                                "User-Agent" to userAgent
-                            )
-                            val headersJsonToStoreAndPass = gson.toJson(headersMap)
 
                             val notificationJobId = withContext(Dispatchers.IO) {
                                 notificationViewModel.initiateAndTrackPdfExport(
@@ -783,7 +719,6 @@ fun PixivImageRow(
                                     illustTitle = illust.title,
                                     totalPages = illust.page_count,
                                     originalImageUrls = originalImageUrlsList,
-                                    originalHeadersJson = headersJsonToStoreAndPass
                                 )
                             }
 
@@ -806,34 +741,36 @@ fun PixivImageRow(
     }
 }
 
-// Helper composable for loading images
 @Composable
 private fun ImageLoaderItem(
     pageIndex: Int,
     getImageUrl: (Int) -> String?,
-    createImageRequestListener: (Int) -> ImageRequest.Listener,
-    commonHeaders: Headers,
     contentDescription: String,
-    context: Context
+    context: Context,
+    imageLoadStates: MutableMap<Int, Boolean>
 ) {
     val imageUrl = getImageUrl(pageIndex) ?: return
 
-    val imageRequest = remember(imageUrl, pageIndex) {
-        ImageRequest.Builder(context)
-            .data(imageUrl)
-            .crossfade(true).crossfade(300)
-            .headers(commonHeaders)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .listener(createImageRequestListener(pageIndex))
-            .build()
+    DisposableEffect(pageIndex) {
+        onDispose {
+            imageLoadStates.remove(pageIndex)
+        }
+    }
+
+    // The request no longer needs a listener attached here.
+    val imageRequest = remember(imageUrl) {
+        NormalImageRequest.normalImageRequest(context, imageUrl ?: "")
     }
 
     AsyncImage(
         model = imageRequest,
         contentDescription = contentDescription,
-        contentScale = ContentScale.Crop,
         modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop,
+        // This is the only part you need to update the state.
+        onState = { state ->
+            imageLoadStates[pageIndex] = state is coil.compose.AsyncImagePainter.State.Success
+        }
     )
 }
 
@@ -852,7 +789,6 @@ fun FullScreenImage(
     illustId: Int,
     initialPageIndex: Int,
     originalImageUrls: List<String>,
-    userAgent: String
 ) {
     val context = LocalContext.current
     var imageLoadState by remember { mutableStateOf<ImageLoadState>(ImageLoadState.Loading) }
@@ -861,6 +797,9 @@ fun FullScreenImage(
         Log.e("FullScreenImage", "Initial page index $initialPageIndex out of bounds. Falling back.")
         originalImageUrls.firstOrNull() ?: ""
     }
+
+    val appVersion = "7.14.0"
+    val userAgent = "PixivAndroidApp/$appVersion (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
 
     var showMenuSheet by remember { mutableStateOf(false) }
     val isMultiPage = originalImageUrls.size > 1

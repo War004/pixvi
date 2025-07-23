@@ -15,7 +15,6 @@ import androidx.compose.material.icons.outlined.FiberNew
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,11 +27,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.pixvi.R
@@ -40,23 +35,9 @@ import com.example.pixvi.AppViewModels
 import com.example.pixvi.login.AuthViewModel
 import com.example.pixvi.login.LoginState
 import com.example.pixvi.network.response.AppLoading.CurrentAccountManager
-import com.example.pixvi.screens.homeScreen.IllustrationsScreen
-import com.example.pixvi.screens.homeScreen.MangaScreen
-import com.example.pixvi.screens.homeScreen.NewestScreen
-import com.example.pixvi.screens.homeScreen.NovelHomeScreen
-import com.example.pixvi.screens.homeScreen.NovelScreen
-import com.example.pixvi.screens.homeScreen.RankingScreen
+import com.example.pixvi.network.response.Home.HomePage.Content
+import com.example.pixvi.utils.ContentRoutes
 import kotlinx.coroutines.launch
-
-
-// Route definitions
-object ContentRoutes {
-    const val ILLUSTRATIONS = "illustrations"
-    const val MANGA = "manga"
-    const val NOVEL = "novel"
-    const val NEWEST = "newest"
-    const val RANKING = "ranking"
-}
 
 private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_profile.png"
 
@@ -65,45 +46,26 @@ private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_p
 fun MainAppShell(
     authViewModel: AuthViewModel,
     rootNavController: NavController,
-    //pixivApiService: PixivApiService = RetrofitClient.apiService,
-    viewModels: AppViewModels
+    viewModels: AppViewModels,
+    // MODIFIED: Accepts a composable content lambda
+    content: @Composable (PaddingValues) -> Unit
 ) {
     val TAG = "MainAppShell"
-
     Log.d(TAG, "MainAppShell composing - rootNavController: ${rootNavController.hashCode()}")
+
     val loginState by authViewModel.loginState.collectAsState()
     var showProfileMenu by remember { mutableStateOf(false) }
     var navigatingToLogin by remember { mutableStateOf(false) }
     val context = LocalContext.current
-
     var showHomeDropdownMenu by remember { mutableStateOf(false) }
 
-    val contentNavController = rememberNavController()
+    // REMOVED: val contentNavController = rememberNavController()
+    // REMOVED: var savedStartRoute by rememberSaveable { mutableStateOf(ContentRoutes.ILLUSTRATIONS) }
+    // REMOVED: LaunchedEffect to save the route
 
-    Log.d(TAG, "ContentNavController created: ${contentNavController.hashCode()}")
-
-    var savedStartRoute by rememberSaveable { mutableStateOf(ContentRoutes.ILLUSTRATIONS) }
-
-
-
-
-    // Observe the current route from the contentNavController
-    val navBackStackEntry by contentNavController.currentBackStackEntryAsState()
+    // MODIFIED: Observe the root NavController's back stack
+    val navBackStackEntry by rootNavController.currentBackStackEntryAsState()
     val currentContentRoute = navBackStackEntry?.destination?.route
-
-    LaunchedEffect(currentContentRoute) {
-        if (currentContentRoute != null) {
-            savedStartRoute = currentContentRoute
-            Log.d(TAG, "Saved current route for recreation: $savedStartRoute")
-        }
-    }
-
-    /*LaunchedEffect(currentContentRoute) {
-        if (currentContentRoute != null) {
-            savedRoute = currentContentRoute
-            Log.d(TAG, "Saved current route for recreation: $savedRoute")
-        }
-    }*/
 
     //Icon based on current screen
     val iconPainter: Painter = when (currentContentRoute) {
@@ -118,8 +80,9 @@ fun MainAppShell(
     LaunchedEffect(loginState, navigatingToLogin) {
         if (loginState !is LoginState.Success && !navigatingToLogin) {
             navigatingToLogin = true
+            // This now correctly pops the entire backstack and goes to Login
             rootNavController.navigate("LoginScreen") {
-                popUpTo(rootNavController.graph.startDestinationId) { inclusive = true }
+                popUpTo(rootNavController.graph.id) { inclusive = true }
                 launchSingleTop = true
             }
         } else if (loginState is LoginState.Success) {
@@ -141,24 +104,7 @@ fun MainAppShell(
                             .padding(horizontal = 16.dp)
                             .verticalScroll(rememberScrollState())
                     ){
-                        // --- DRAWER CONTENT ---
                         Text("Quick Options", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
-                        // Illustrations Item in Drawer (optional, if you want it here too)
-                        NavigationDrawerItem(
-                            label = { Text("Illustrations") },
-                            icon = { Icon(painterResource(R.drawable.imagesmode_24px), "Illustrations") },
-                            selected = currentContentRoute == ContentRoutes.ILLUSTRATIONS,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                contentNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
-                                    popUpTo(contentNavController.graph.findStartDestination().id) {
-                                        saveState = true // Good practice for drawer/bottom bar
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
                         NavigationDrawerItem(
                             label = {Text("Bookmarks")},
                             icon = {Icon(Icons.Default.FavoriteBorder,"Option to show bookmarks")},
@@ -196,17 +142,27 @@ fun MainAppShell(
                             }
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        Text("Watchlisted works", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                        NavigationDrawerItem(
+                            label = { Text("Illustrations") },
+                            icon = { Icon(painterResource(R.drawable.imagesmode_24px), "Illustrations") },
+                            selected = currentContentRoute == ContentRoutes.ILLUSTRATIONS,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                rootNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
+                                    popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
                         NavigationDrawerItem(
                             label = {Text("Manga")},
                             icon = {Icon(Icons.Filled.PhotoAlbum,"Option to show following manga")},
                             selected = currentContentRoute == ContentRoutes.MANGA,
                             onClick = {
                                 scope.launch { drawerState.close() }
-                                contentNavController.navigate(ContentRoutes.MANGA) {
-                                    popUpTo(contentNavController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
+                                rootNavController.navigate(ContentRoutes.MANGA) {
+                                    popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -218,10 +174,8 @@ fun MainAppShell(
                             selected = currentContentRoute == ContentRoutes.NOVEL,
                             onClick = {
                                 scope.launch { drawerState.close() }
-                                contentNavController.navigate(ContentRoutes.NOVEL) {
-                                    popUpTo(contentNavController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
+                                rootNavController.navigate(ContentRoutes.NOVEL) {
+                                    popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -239,18 +193,9 @@ fun MainAppShell(
                 topBar = {
                     TopAppBar(
                         title = { Text("") },
-
                         navigationIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = {
-                                    scope.launch {
-                                        if (drawerState.isClosed) {
-                                            drawerState.open()
-                                        } else {
-                                            drawerState.close()
-                                        }
-                                    }
-                                }) {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                     Icon(Icons.Default.Menu, contentDescription = "Menu")
                                 }
 
@@ -265,11 +210,10 @@ fun MainAppShell(
                                         DropdownMenuItem(
                                             text = { Text("Illustrations") },
                                             onClick = {
-                                                Log.d(TAG, "TopAppBar Dropdown: Navigating to Illustrations")
                                                 showHomeDropdownMenu = false
                                                 if (currentContentRoute != ContentRoutes.ILLUSTRATIONS) {
-                                                    contentNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
-                                                        popUpTo(contentNavController.graph.findStartDestination().id) { saveState = true }
+                                                    rootNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
+                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                         launchSingleTop = true
                                                         restoreState = true
                                                     }
@@ -280,12 +224,10 @@ fun MainAppShell(
                                         DropdownMenuItem(
                                             text = { Text("Manga") },
                                             onClick = {
-                                                Log.d(TAG, "TopAppBar Dropdown: Navigating to Manga")
-
                                                 showHomeDropdownMenu = false
                                                 if (currentContentRoute != ContentRoutes.MANGA) {
-                                                    contentNavController.navigate(ContentRoutes.MANGA) {
-                                                        popUpTo(contentNavController.graph.findStartDestination().id) { saveState = true }
+                                                    rootNavController.navigate(ContentRoutes.MANGA) {
+                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                         launchSingleTop = true
                                                         restoreState = true
                                                     }
@@ -298,8 +240,8 @@ fun MainAppShell(
                                             onClick = {
                                                 showHomeDropdownMenu = false
                                                 if (currentContentRoute != ContentRoutes.NOVEL) {
-                                                    contentNavController.navigate(ContentRoutes.NOVEL) {
-                                                        popUpTo(contentNavController.graph.findStartDestination().id) { saveState = true }
+                                                    rootNavController.navigate(ContentRoutes.NOVEL) {
+                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                         launchSingleTop = true
                                                         restoreState = true
                                                     }
@@ -312,8 +254,8 @@ fun MainAppShell(
                                             onClick = {
                                                 showHomeDropdownMenu = false
                                                 if (currentContentRoute != ContentRoutes.NEWEST) {
-                                                    contentNavController.navigate(ContentRoutes.NEWEST) {
-                                                        popUpTo(contentNavController.graph.findStartDestination().id) { saveState = true }
+                                                    rootNavController.navigate(ContentRoutes.NEWEST) {
+                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                         launchSingleTop = true
                                                         restoreState = true
                                                     }
@@ -326,8 +268,8 @@ fun MainAppShell(
                                             onClick = {
                                                 showHomeDropdownMenu = false
                                                 if (currentContentRoute != ContentRoutes.RANKING) {
-                                                    contentNavController.navigate(ContentRoutes.RANKING) {
-                                                        popUpTo(contentNavController.graph.findStartDestination().id) { saveState = true }
+                                                    rootNavController.navigate(ContentRoutes.NEWEST) {
+                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                         launchSingleTop = true
                                                         restoreState = true
                                                     }
@@ -339,6 +281,7 @@ fun MainAppShell(
                                 }
                             }
                         },
+                        // ... your actions and profile menu logic ...
                         actions = {
                             IconButton(onClick = {
                                 Toast.makeText(context, "Search clicked", Toast.LENGTH_SHORT).show()
@@ -384,42 +327,10 @@ fun MainAppShell(
                     )
                 }
             ) { innerPadding ->
-                Log.d(TAG, "NavHost composing with startDestination: $savedStartRoute")
-                NavHost(
-                    navController = contentNavController,
-                    startDestination = savedStartRoute,// Default content screen
-                    modifier = Modifier.padding(innerPadding).fillMaxSize()
-                ) {
-                    composable(ContentRoutes.ILLUSTRATIONS) {
-                        Log.d(TAG, "Composing IllustrationsScreen")
-                        IllustrationsScreen(
-                            navController = rootNavController,
-                            homeIllustViewModel = viewModels.homeIllustViewModel
-                        )
-                    }
-                    composable(ContentRoutes.MANGA) {
-
-                        Log.d(TAG, "Composing MangaScreen")
-                        MangaScreen(
-                            navController = rootNavController,
-                            mangaViewModel = viewModels.mangaViewModel
-                        )
-                    }
-                    composable(ContentRoutes.NOVEL) {
-                        NovelHomeScreen(
-                            navController = rootNavController,
-                            homeINovelViewModel = viewModels.homeINovelViewModel
-                        )
-                    }
-                    composable(ContentRoutes.NEWEST) {
-                        NewestScreen(navController = rootNavController)
-                    }
-                    composable(ContentRoutes.RANKING) {
-                        RankingScreen(navController = rootNavController)
-                    }
-                }
+                // REMOVED: The entire inner NavHost is gone.
+                // ADDED: Call the content lambda passed into the function.
+                content(innerPadding)
             }
-
             ProfileMenu(
                 showMenu = showProfileMenu,
                 onDismissRequest = { showProfileMenu = false },

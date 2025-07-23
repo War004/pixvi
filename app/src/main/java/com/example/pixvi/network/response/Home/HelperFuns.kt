@@ -60,6 +60,7 @@ import coil.request.CachePolicy
 import coil.request.ErrorResult
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.example.pixvi.utils.NormalImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Headers
@@ -224,7 +225,6 @@ object ImageUtils {
     suspend fun loadBitmapFromUrl(
         context: Context,
         imageUrl: String?,
-        headers: okhttp3.Headers? = null
     ): Bitmap? {
         if (imageUrl.isNullOrBlank()) {
             withContext(Dispatchers.Main) {
@@ -233,14 +233,9 @@ object ImageUtils {
             return null
         }
 
-        val request = ImageRequest.Builder(context)
-            .data(imageUrl)
-            .apply { if (headers != null) headers(headers) }
-            .allowHardware(false) // Important for accessing the Bitmap directly
-            .build()
-
-        withContext(Dispatchers.Main) {
-            // Toast.makeText(context, "Loading image...", Toast.LENGTH_SHORT).show() // Optional loading indicator
+        val request = NormalImageRequest.normalImageRequest(context, imageUrl) { builder ->
+            // Add the specific configuration this function needs
+            builder.allowHardware(false)
         }
 
         return when (val result = context.imageLoader.execute(request)) {

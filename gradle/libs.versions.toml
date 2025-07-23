@@ -2,7 +2,7 @@
 
 accompanistSystemuicontroller = "0.36.0"
 accompanistNavigationAnimation = "0.36.0"
-agp = "8.11.0"
+agp = "8.11.1"
 animation = "1.8.3"
 browser = "1.8.0"
 coilCompose = "2.7.0"
@@ -18,30 +18,31 @@ junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
 kotlinxCoroutinesAndroid = "1.10.2"
-ktorClientAndroid = "3.2.0"
-ktorClientCio = "3.2.0"
-ktorClientContentNegotiation = "3.2.0"
-ktorClientCore = "3.2.0"
-ktorClientLoggingJvm = "3.2.0"
-ktorClientSerializationJvm = "3.2.0"
-ktorSerializationKotlinxJson = "3.2.0"
+ktorClientAndroid = "3.2.1"
+ktorClientCio = "3.2.1"
+ktorClientContentNegotiation = "3.2.1"
+ktorClientCore = "3.2.1"
+ktorClientLoggingJvm = "3.2.1"
+ktorClientSerializationJvm = "3.2.1"
+ktorSerializationKotlinxJson = "3.2.1"
 lifecycleRuntimeKtx = "2.9.1"
 activityCompose = "1.10.1"
 composeBom = "2025.06.01"
-composeNavigation = "2.9.0"
+composeNavigation = "2.9.1"
 logbackClassic = "1.5.18"
-loggingInterceptor = "4.12.0"
+loggingInterceptor = "5.1.0"
 material = "1.12.0"
 materialIconsExtended = "1.7.8"
-okhttp = "4.12.0"
+okhttp = "5.1.0" #warning
 palette = "1.0.0"
-retrofit = "3.0.0"
+retrofit = "3.0.0" #warning
 roomRuntime = "2.7.2"
 securityCrypto = "1.1.0-beta01"
 serialization = "1.9.0"
 protoliteWellKnownTypes = "18.0.1"
-material3 = "1.4.0-alpha16"
+material3 = "1.4.0-alpha17"
 workRuntimeKtx = "2.10.2"
+media3Session = "1.7.1"
 
 [libraries]
 # UI and Compose
@@ -116,6 +117,7 @@ protolite-well-known-types = { group = "com.google.firebase", name = "protolite-
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3Session" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -40,7 +42,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -50,7 +51,6 @@ import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.RemoveRedEye
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.graphics.BlendMode
@@ -59,7 +59,6 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.text.HtmlCompat
-import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -73,22 +72,18 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
 import okhttp3.Headers
 import androidx.compose.ui.graphics.painter.Painter
-
-
-private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_profile.png"
-
+import androidx.compose.ui.input.pointer.pointerInput
+import com.example.pixvi.NovelDetailScreen
 
 @OptIn(FlowPreview::class)
 @Composable
 fun NovelHomeScreen(
+    modifier: Modifier,
     navController: NavController,
     homeINovelViewModel: HomeNovelViewModel
 ) {
     val uiState by homeINovelViewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
-
-    val scope = rememberCoroutineScope()
-
     val favoriteRequestFlow = remember {
         MutableSharedFlow<Pair<Novel, BookmarkRestrict>>(extraBufferCapacity = 1)
     }
@@ -104,11 +99,6 @@ fun NovelHomeScreen(
                     visibility = visibility
                 )
             }
-    }
-
-
-    LaunchedEffect(Unit) {
-        homeINovelViewModel.loadInitialRecommendations()
     }
 
     // Pagination (This existing effect remains unchanged)
@@ -132,7 +122,7 @@ fun NovelHomeScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
@@ -230,7 +220,12 @@ fun NovelHomeScreen(
                     ) { index, novel ->
                         Box(modifier = Modifier.padding(horizontal = 8.dp)) {
                             // Pass the NovelForDisplay object to the optimized CardNovel
-                            CardNovel(novel = novel)
+                            CardNovel(
+                                novel = novel,
+                                onClick = { navController.navigate(NovelDetailScreen(novelId = novel.id)) },
+                                onLongClick = {/*nothing*/},
+                                onNovelView = {homeINovelViewModel.onNovelViewed(novel.id)}
+                            )
                         }
                     }
 
@@ -266,7 +261,7 @@ fun NovelHomeScreen(
 
 //Indivual elements
 @Composable
-fun CardNovel(novel: NovelForDisplay) {
+fun CardNovel(novel: NovelForDisplay, onClick: () -> Unit, onLongClick: () -> Unit, onNovelView: ()-> Unit) {
     var showDetails by remember { mutableStateOf(false) }
     val clipboard: androidx.compose.ui.platform.Clipboard = LocalClipboard.current
     val context = LocalContext.current
@@ -284,9 +279,12 @@ fun CardNovel(novel: NovelForDisplay) {
             .height(150.dp)
             .fillMaxWidth()
             .combinedClickable(
-                onClick = {/*Opens the novel*/},
+                onClick = {
+                    onNovelView()
+                    onClick()
+                          },
                 onLongClick = {
-                    /*Opens a bottom sheet providing additional info */
+                    onLongClick()
                 }
             ),
         shape = RoundedCornerShape(16.dp),
@@ -448,11 +446,22 @@ fun CardNovel(novel: NovelForDisplay) {
                             .fillMaxSize()
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
+                        val captionScrollState = rememberScrollState()
                         // The caption/description
                         Text(
                             modifier = Modifier
                                 .weight(1f) // Takes up most of the space
-                                .verticalScroll(rememberScrollState())
+                                .verticalScroll(captionScrollState)
+                                .pointerInput(Unit){
+                                    detectVerticalDragGestures{ change, dragAmount ->
+                                        // Consume the pointer input event to stop it from propagating
+                                        change.consume()
+                                        // Manually scroll the text's state in a coroutine
+                                        scope.launch {
+                                            captionScrollState.scrollBy(-dragAmount)
+                                        }
+                                    }
+                                }
                                 .combinedClickable(
                                     onClick = {},
                                     onLongClick = {
@@ -493,7 +502,9 @@ fun CardNovel(novel: NovelForDisplay) {
                 // KEY CHANGE: The IconButton is now placed in the parent Box, aligned to the corner.
                 // It's outside the if/else block, so its position is always the same.
                 IconButton(
-                    onClick = { showDetails = !showDetails },
+                    onClick = {
+                        onNovelView()
+                        showDetails = !showDetails },
                     modifier = Modifier.align(Alignment.BottomEnd)
                 ) {
                     Icon(

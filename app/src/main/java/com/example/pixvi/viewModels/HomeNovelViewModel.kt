@@ -1,17 +1,21 @@
 package com.example.pixvi.viewModels
 
 
+import android.app.Application
 import android.util.Log
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.fromHtml
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.pixvi.data.local.AppDatabase
+import com.example.pixvi.data.local.NovelHistory.NovelHistoryRepository
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.network.api.PixivApiService
 import com.example.pixvi.network.response.Home.Novels.Novel
 import com.example.pixvi.network.response.Home.Novels.NovelForDisplay
 import com.example.pixvi.network.response.Home.Novels.RankingNovel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +24,8 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
 class HomeNovelViewModel(
-    private val pixivApiService: PixivApiService
+    private val pixivApiService: PixivApiService,
+    private val historyRepository: NovelHistoryRepository
 ) : ViewModel() {
 
     data class NovelUiState(
@@ -32,8 +37,14 @@ class HomeNovelViewModel(
         val errorMessage: String? = null
     )
 
+    private val TAG = "HomeNovelViewModel"
+
     private val _uiState = MutableStateFlow(NovelUiState())
     val uiState: StateFlow<NovelUiState> = _uiState.asStateFlow()
+
+    init {
+        loadInitialRecommendations()
+    }
 
     private fun Novel.toNovelForDisplay(): NovelForDisplay {
 
@@ -62,15 +73,18 @@ class HomeNovelViewModel(
      */
     fun loadInitialRecommendations() {
 
-
-        if (_uiState.value.recommendations.isNotEmpty() || _uiState.value.isLoading) {
-            return
-        }
-
         viewModelScope.launch {
+            Log.d(TAG, "Loading the intial recommedation")
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val response = pixivApiService.getRecommendedNovel()
+                val historyPayload = historyRepository.prepareHistoryForApi()
+                Log.d(TAG, "$historyPayload")
+                val response = pixivApiService.getRecommendedNovel(
+                    readNovelIds = historyPayload.readNovelIds,
+                    readNovelDatetimes = historyPayload.readNovelDatetimes,
+                    viewNovelIds = historyPayload.viewNovelIds,
+                    viewNovelDatetimes = historyPayload.viewNovelDatetimes
+                )
 
                 if (response.isSuccessful) {
                     val body = response.body()
@@ -92,6 +106,7 @@ class HomeNovelViewModel(
                     }
                 } else {
                     val errorMsg = "API Error ${response.code()}: ${response.message()}"
+                    Log.d(TAG, "Error while response: $response")
                     _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
                 }
             } catch (e: Exception) {
@@ -146,6 +161,24 @@ class HomeNovelViewModel(
                 _uiState.update { it.copy(isLoadingMore = false, errorMessage = "HTTP Error: ${e.message}") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoadingMore = false, errorMessage = "Error: ${e.message}") }
+            }
+        }
+    }
+
+    /**
+     * Records a "VIEW" event for a specific novel in the local history database.
+     *
+     * @param novelId The ID of the novel that was viewed.
+     */
+    fun onNovelViewed(novelId: Int) { // <-- CHANGED from String to Int
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Attempting to add VIEW event for novel ID: $novelId")
+
+                historyRepository.addViewEvent(novelId)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add VIEW event for novel ID: $novelId", e)
             }
         }
     }
@@ -215,13 +248,19 @@ class HomeNovelViewModel(
 }
 
 class HomeNovelViewModelFactory(
+    private val application: Application,
     private val pixivApiService: PixivApiService
 ) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
+
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HomeNovelViewModel::class.java)) {
-            // Pass the PixivApiService to the ViewModel constructor
-            return HomeNovelViewModel(pixivApiService) as T
+            // 1. Create the dependencies here
+            val historyDao = AppDatabase.getDatabase(application).novelHistoryDao()
+            val historyRepository = NovelHistoryRepository(historyDao)
+
+            // 2. Create the ViewModel and pass the dependencies in
+            @Suppress("UNCHECKED_CAST")
+            return HomeNovelViewModel(pixivApiService, historyRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

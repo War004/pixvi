@@ -32,8 +32,6 @@ class PdfExportWorker(
         const val KEY_ILLUST_TITLE = "illust_title"
         const val KEY_TOTAL_PAGES = "total_pages"
         const val KEY_IMAGE_URLS = "image_urls"
-        const val KEY_HEADERS_JSON = "headers_json"
-
         private const val TAG = "PdfExportWorker"
     }
 
@@ -43,8 +41,6 @@ class PdfExportWorker(
         val illustTitle = inputData.getString(KEY_ILLUST_TITLE) ?: "Untitled"
         val totalPages = inputData.getInt(KEY_TOTAL_PAGES, 0)
         val imageUrls = inputData.getStringArray(KEY_IMAGE_URLS) ?: emptyArray()
-        val headersJson = inputData.getString(KEY_HEADERS_JSON)
-
 
         if (notificationId == -1L || illustId == -1 || imageUrls.isEmpty() || totalPages == 0) {
             Log.e(TAG, "Invalid input data for PdfExportWorker. NotificationId: $notificationId, IllustId: $illustId")
@@ -56,17 +52,6 @@ class PdfExportWorker(
                 )
             }
             return Result.failure()
-        }
-
-        val headers: OkHttpHeaders? = headersJson?.let {
-            try {
-                val type = object : TypeToken<Map<String, String>>() {}.type
-                val map: Map<String, String> = gson.fromJson(it, type)
-                OkHttpHeaders.Builder().apply { map.forEach { (key, value) -> add(key, value) } }.build()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to parse headers JSON: $it", e)
-                null
-            }
         }
 
 
@@ -82,7 +67,7 @@ class PdfExportWorker(
 
             imageUrls.forEachIndexed { index, url ->
                 Log.d(TAG, "Downloading page ${index + 1} from $url")
-                val bitmap = ImageUtils.loadBitmapFromUrl(applicationContext, url, headers) // Pass headers
+                val bitmap = ImageUtils.loadBitmapFromUrl(applicationContext, url) // Pass headers
                 if (bitmap != null) {
                     val tempFile = saveBitmapToTempCacheForPdf(applicationContext, bitmap, illustId, index)
                     if (tempFile != null) {

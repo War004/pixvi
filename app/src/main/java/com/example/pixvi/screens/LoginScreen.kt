@@ -29,9 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.example.pixvi.R
 import com.example.pixvi.login.AuthViewModel
 import com.example.pixvi.login.LoginState
+import com.example.pixvi.utils.ContentRoutes
 
 @Composable
 fun LoginScreen(
@@ -42,38 +44,41 @@ fun LoginScreen(
     val loginState by authViewModel.loginState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-
-    LaunchedEffect(Unit) { // Use a key that doesn't change if you only want one collector
+    // This effect for launching the browser is perfect as is.
+    LaunchedEffect(Unit) {
         authViewModel.launchLoginUrlEvent.collect { loginUri ->
-            val customTabsIntentBuilder = CustomTabsIntent.Builder()
-            // Optional: Configure appearance of the Custom Tab
-            // try {
-            //     customTabsIntentBuilder.setToolbarColor(ContextCompat.getColor(context, R.color.your_primary_color))
-            // } catch (resNotFound: Resources.NotFoundException) { /* ... */ }
-            customTabsIntentBuilder.setShowTitle(true)
-
-            val customTabsIntent = customTabsIntentBuilder.build()
-
-
+            val customTabsIntent = CustomTabsIntent.Builder().build()
             try {
                 customTabsIntent.launchUrl(context, loginUri)
             } catch (e: ActivityNotFoundException) {
                 Log.e("LoginScreen", "Chrome Custom Tabs not available. Falling back. ${e.message}")
                 val browserIntent = Intent(Intent.ACTION_VIEW, loginUri)
-                // For fallback, if you want to ensure it works, you might need FLAG_ACTIVITY_NEW_TASK
-                // if there's any doubt about the context or if no browser is found for the current task.
-                // However, usually for ACTION_VIEW, the system handles it well.
-                // browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 try {
                     context.startActivity(browserIntent, null)
                 } catch (e2: ActivityNotFoundException) {
                     Log.e("LoginScreen", "Fallback browser also not found: ${e2.message}")
-                    // Consider updating loginState to Error via ViewModel if launch completely fails
-                    // authViewModel.reportBrowserNotFoundError() // You'd need a method for this
                 }
             }
         }
     }
+
+    // ADDED: A single, top-level LaunchedEffect to handle navigation.
+    // This is cleaner than nesting it inside the `when` block.
+    LaunchedEffect(loginState) {
+        if (loginState is LoginState.Success) {
+            // MODIFIED: Navigate to the actual default content screen.
+            navController.navigate(ContentRoutes.ILLUSTRATIONS) {
+                // This is the most robust way to clear the back stack.
+                // It removes the LoginScreen so the user can't go back to it.
+                popUpTo(navController.graph.findStartDestination().id) {
+                    inclusive = true
+                }
+                // Ensures we don't create multiple copies of the main screen.
+                launchSingleTop = true
+            }
+        }
+    }
+
 
     Column(
         modifier = Modifier
@@ -81,9 +86,9 @@ fun LoginScreen(
             .padding(innerPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
-    ){
-        when(val state = loginState) {
-            is LoginState.Idle ->{
+    ) {
+        when (val state = loginState) {
+            is LoginState.Idle -> {
                 Text(
                     text = "Find something you like",
                     modifier = Modifier.fillMaxWidth(),
@@ -100,7 +105,7 @@ fun LoginScreen(
                         containerColor = colorResource(id = R.color.pixiv_blue),
                         contentColor = Color.White
                     )
-                ){
+                ) {
                     Text(
                         modifier = Modifier.fillMaxWidth(),
                         text = "Login",
@@ -113,30 +118,21 @@ fun LoginScreen(
                     textAlign = TextAlign.Center
                 )
             }
-            is LoginState.Loading -> {
+            is LoginState.Loading, is LoginState.Success -> {
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Loading")
+                Text("Loading...")
             }
             is LoginState.Initiated -> {
-                //Do nothing, the webpage would open upon clicking
-                //Reason of removing: Upon going back after the webpage opened it would show the text without any action to be taken, Now it would retain the home screen
-                //Text("Follow the steps in the browser...")
+                //Maybe show something but the app redirect to browers
             }
-            is LoginState.Success -> {
-                LaunchedEffect(state) { // Ensure navigation happens once per success state
-                    navController.navigate("MainAppShell") {
-                        popUpTo("LoginScreen") { inclusive = true }
-                        launchSingleTop = true// Avoid going back to login
-                    }
-                }
-            }
+
             is LoginState.Error -> {
                 Text("Error: ${state.message}")
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
-                    onClick = {authViewModel.startLoginFlow()}
-                ){
+                    onClick = { authViewModel.startLoginFlow() }
+                ) {
                     Text("Try Again")
                 }
             }

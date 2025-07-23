@@ -5,6 +5,7 @@ import com.example.pixvi.network.response.AppLoading.UserStateResponse
 import com.example.pixvi.network.response.Home.Manga.HomeManga
 import com.example.pixvi.network.response.Home.Novels.HomeNovel
 import com.example.pixvi.network.response.Home.Novels.RelatedNovel
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
@@ -187,4 +188,36 @@ interface PixivApiService {
         @Field("illust_id") illustId: Long
     ): Response<Unit>
 
+    /**
+     * To get a novel's content, which is returned as an HTML document.
+     * This HTML contains embedded JSON data that can be parsed by a WebView or a custom parser.
+     *
+     * @param id The unique identifier for the novel.
+     * @param font The font family to be used for rendering the novel text.
+     * @param fontSize The font size for the novel text (e.g., "16.0px").
+     * @param lineHeight The line height for paragraphs (e.g., "1.75").
+     * @param color The text color in hex format (e.g., "#101010").
+     * @param backgroundColor The background color in hex format (e.g., "#EFEFEF").
+     * @param marginTop The top margin for the content area (e.g., "56px").
+     * @param marginBottom The bottom margin for the content area (e.g., "53px").
+     * @param theme The color theme for the viewer (e.g., "light" or "dark").
+     * @param useBlock A boolean flag for a specific layout property.
+     * @param viewerVersion The version of the novel viewer client. ⚠️ Warning: This default value can change frequently with app updates.
+     * @param restrictedMode A boolean flag to indicate if restricted mode is enabled.
+     */
+    @GET("webview/v2/novel")
+    suspend fun getNovel(
+        @Query("id") id: Int,
+        @Query("font") font: String = "default",
+        @Query("font_size") fontSize: String = "16.0px",
+        @Query("line_height") lineHeight: String = "1.75",
+        @Query("color") color: String = "#101010",
+        @Query("background_color") backgroundColor: String = "#EFEFEF",
+        @Query("margin_top") marginTop: String = "56px",
+        @Query("margin_bottom") marginBottom: String = "53px",
+        @Query("theme") theme: String = "light",
+        @Query("use_block") useBlock: Boolean = true,
+        @Query("viewer_version") viewerVersion: String = "20250616_seasonal_effect",
+        @Query("restricted_mode") restrictedMode: Boolean = false
+    ): ResponseBody
 }
