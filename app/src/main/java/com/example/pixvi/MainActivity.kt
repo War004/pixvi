@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
 
                             // ADDED: Individual routes for each content screen, wrapped in the shell.
                             composable(ContentRoutes.ILLUSTRATIONS) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
                                     IllustrationsScreen(
                                         modifier = Modifier.padding(padding),
                                         navController = rootNavController,
@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.MANGA) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
                                     MangaScreen(
                                         modifier = Modifier.padding(padding),
                                         navController = rootNavController,
@@ -156,7 +156,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.NOVEL) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
                                     NovelHomeScreen(
                                         modifier = Modifier.padding(padding),
                                         navController = rootNavController,
@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.NEWEST) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
                                     NewestScreen(
                                         //modifier = Modifier.padding(padding),
                                         navController = rootNavController
@@ -175,7 +175,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.RANKING) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, viewModels = appViewModels) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
                                     RankingScreen(
                                         //modifier = Modifier.padding(padding),
                                         navController = rootNavController

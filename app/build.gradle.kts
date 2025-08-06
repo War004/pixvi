@@ -116,15 +116,15 @@ dependencies {
 
     // Image Loading and animated images
     implementation(libs.coil.compose)
-    implementation("io.coil-kt:coil-gif:2.7.0") //libs.coil.gif is casing an error...
+    implementation(libs.coil.gif)
 
     //Extended Icons
     implementation(libs.androidx.material.icons.extended)
 
-    implementation("androidx.media3:media3-exoplayer:1.7.1")
-    implementation("androidx.media3:media3-exoplayer-dash:1.7.1")
-    implementation("androidx.media3:media3-ui:1.7.1")
-    implementation("androidx.media3:media3-ui-compose:1.7.1")
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.dash)
+    implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.ui.compose)
 
     //temp
     implementation(libs.logging.interceptor)

@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+
+    <!--
+    The diameter of the outer circles has been increased by 20% (from 6dp to 7.2dp).
+    The inner holes have been adjusted to maintain a consistent 2dp ring thickness.
+    The lines and overall icon size remain unchanged.
+    -->
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M6,4.4 A 3.6,3.6 0 1 1 6,11.6 A 3.6,3.6 0 1 1 6,4.4 Z M6,6.4 A 1.6,1.6 0 1 1 6,9.6 A 1.6,1.6 0 1 1 6,6.4 Z M12,7 L20,7 L20,9 L12,9 Z M4,15 L12,15 L12,17 L4,17 Z M18,12.4 A 3.6,3.6 0 1 1 18,19.6 A 3.6,3.6 0 1 1 18,12.4 Z M18,14.4 A 1.6,1.6 0 1 1 18,17.6 A 1.6,1.6 0 1 1 18,14.4 Z"/>
+
+</vector>

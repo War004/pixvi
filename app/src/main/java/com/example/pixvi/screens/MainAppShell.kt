@@ -2,9 +2,18 @@ package com.example.pixvi.screens
 
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
@@ -12,32 +21,38 @@ import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.FiberNew
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.pixvi.R
-import com.example.pixvi.AppViewModels
 import com.example.pixvi.login.AuthViewModel
 import com.example.pixvi.login.LoginState
 import com.example.pixvi.network.response.AppLoading.CurrentAccountManager
-import com.example.pixvi.network.response.Home.HomePage.Content
 import com.example.pixvi.utils.ContentRoutes
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.input.ImeAction
+
 
 private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_profile.png"
 
@@ -46,8 +61,6 @@ private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_p
 fun MainAppShell(
     authViewModel: AuthViewModel,
     rootNavController: NavController,
-    viewModels: AppViewModels,
-    // MODIFIED: Accepts a composable content lambda
     content: @Composable (PaddingValues) -> Unit
 ) {
     val TAG = "MainAppShell"
@@ -59,11 +72,6 @@ fun MainAppShell(
     val context = LocalContext.current
     var showHomeDropdownMenu by remember { mutableStateOf(false) }
 
-    // REMOVED: val contentNavController = rememberNavController()
-    // REMOVED: var savedStartRoute by rememberSaveable { mutableStateOf(ContentRoutes.ILLUSTRATIONS) }
-    // REMOVED: LaunchedEffect to save the route
-
-    // MODIFIED: Observe the root NavController's back stack
     val navBackStackEntry by rootNavController.currentBackStackEntryAsState()
     val currentContentRoute = navBackStackEntry?.destination?.route
 
@@ -95,6 +103,28 @@ fun MainAppShell(
         val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
+
+        val textFieldState = rememberTextFieldState()
+        val scrollState = rememberScrollState()
+        val focusManager = LocalFocusManager.current
+
+        val interactionSource = remember { MutableInteractionSource() }
+        val isTextFieldFocused by interactionSource.collectIsFocusedAsState()
+
+
+        LaunchedEffect(textFieldState.text) {
+            val currentQuery = textFieldState.text.toString()
+
+            /*TODO autosuggest endpoint logic goes here*/
+            // For example:
+            if (currentQuery.isNotBlank()) {
+                /*TODO autosuggest with latency*/
+            }
+            else{
+                /*Nothing*/
+            }
+            // }
+        }
 
         ModalNavigationDrawer(
             drawerContent = {
@@ -192,12 +222,69 @@ fun MainAppShell(
                     .nestedScroll(scrollBehavior.nestedScrollConnection),
                 topBar = {
                     TopAppBar(
-                        title = { Text("") },
-                        navigationIcon = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                    Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        title = {
+                            BasicTextField(
+                                state = textFieldState,
+                                scrollState = scrollState,
+                                modifier = Modifier.fillMaxWidth(),
+                                interactionSource = interactionSource,
+                                textStyle = LocalTextStyle.current.copy(
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 16.sp
+                                ),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                lineLimits = TextFieldLineLimits.SingleLine,
+                                keyboardOptions = KeyboardOptions(
+                                    imeAction = ImeAction.Search
+                                ),
+                                onKeyboardAction = {
+                                    /*Load the search results*/
+                                    focusManager.clearFocus()
+                                },
+                                decorator = { innerTextField ->
+                                    Row(
+                                        modifier = Modifier
+                                            .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(onClick = { /*TODO filter logic to be done*/ }) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.filter_icon),
+                                                contentDescription = "Tune Icon"
+                                            )
+                                        }
+
+                                        Box(modifier = Modifier
+                                            .padding(end = 15.dp)
+                                        ) {
+                                            if (textFieldState.text.isEmpty()) {
+                                                Text(
+                                                    text = "Search or enter URL",
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    }
                                 }
+                            )
+                        },
+                        navigationIcon = {
+                            IconButton(
+                                onClick = {
+                                    scope.launch { drawerState.open() }
+                                })
+                            {
+                                Icon(
+                                    imageVector = Icons.Outlined.Menu,
+                                    contentDescription = "Menu Icon"
+                                )
+                            }
+                        },
+                        actions = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
 
                                 Box {
                                     IconButton(onClick = { showHomeDropdownMenu = true }) {
@@ -279,47 +366,38 @@ fun MainAppShell(
                                         )
                                     }
                                 }
-                            }
-                        },
-                        // ... your actions and profile menu logic ...
-                        actions = {
-                            IconButton(onClick = {
-                                Toast.makeText(context, "Search clicked", Toast.LENGTH_SHORT).show()
-                                Log.d("MainAppShell", "Search icon clicked (TODO: Implement)")
-                            }) {
-                                Icon(Icons.Default.Search, contentDescription = "Search")
-                            }
-                            IconButton(onClick = { showProfileMenu = true }) {
-                                val user = currentUser
-                                if (user != null) {
-                                    val mediumImageUrl = user.profileImageUrls?.medium
-                                    if (mediumImageUrl.isNullOrEmpty() || mediumImageUrl == NO_PROFILE_IMAGE_URL) {
+                                IconButton(onClick = { showProfileMenu = true }) {
+                                    val user = currentUser
+                                    if (user != null) {
+                                        val mediumImageUrl = user.profileImageUrls?.medium
+                                        if (mediumImageUrl.isNullOrEmpty() || mediumImageUrl == NO_PROFILE_IMAGE_URL) {
+                                            Icon(
+                                                imageVector = Icons.Filled.AccountCircle,
+                                                contentDescription = "Profile Menu - Default Avatar",
+                                                modifier = Modifier.size(32.dp).clip(CircleShape),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        } else {
+                                            AsyncImage(
+                                                model = ImageRequest.Builder(LocalContext.current)
+                                                    .data(mediumImageUrl)
+                                                    .crossfade(true)
+                                                    .placeholder(R.drawable.ic_launcher_background)
+                                                    .error(R.drawable.ic_launcher_background)
+                                                    .build(),
+                                                contentDescription = "Profile Menu",
+                                                modifier = Modifier.size(32.dp).clip(CircleShape),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    } else {
                                         Icon(
                                             imageVector = Icons.Filled.AccountCircle,
-                                            contentDescription = "Profile Menu - Default Avatar",
+                                            contentDescription = "Profile Menu - Logged Out",
                                             modifier = Modifier.size(32.dp).clip(CircleShape),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                    } else {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(mediumImageUrl)
-                                                .crossfade(true)
-                                                .placeholder(R.drawable.ic_launcher_background)
-                                                .error(R.drawable.ic_launcher_background)
-                                                .build(),
-                                            contentDescription = "Profile Menu",
-                                            modifier = Modifier.size(32.dp).clip(CircleShape),
-                                            contentScale = ContentScale.Crop
-                                        )
                                     }
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Filled.AccountCircle,
-                                        contentDescription = "Profile Menu - Logged Out",
-                                        modifier = Modifier.size(32.dp).clip(CircleShape),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
                                 }
                             }
                         },
@@ -327,9 +405,29 @@ fun MainAppShell(
                     )
                 }
             ) { innerPadding ->
-                // REMOVED: The entire inner NavHost is gone.
-                // ADDED: Call the content lambda passed into the function.
-                content(innerPadding)
+                Box(Modifier.padding(innerPadding)) {
+                    content(PaddingValues())
+                }
+
+                if (isTextFieldFocused) {
+                    BackHandler {
+                        focusManager.clearFocus()
+                    }
+
+                    // The overlay itself.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.6f)) // A semi-transparent scrim
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null // No ripple effect
+                            ) {
+                                // When the overlay is clicked, clear focus.
+                                focusManager.clearFocus()
+                            }
+                    )
+                }
             }
             ProfileMenu(
                 showMenu = showProfileMenu,
@@ -355,7 +453,8 @@ fun MainAppShell(
         }
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Redirecting...")
+            Text("If you are seeing this message that means, you have opened the app during the login process.")
+            Text("Please continue with the login or reopen the app.")
         }
     }
 }
