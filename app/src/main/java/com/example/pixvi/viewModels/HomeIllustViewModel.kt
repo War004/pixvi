@@ -7,8 +7,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.network.api.PixivApiService
-import com.example.pixvi.network.response.AppLoading.CurrentAccountManager
 import com.example.pixvi.network.response.Home.Illust.Illust
+import com.example.pixvi.utils.PageIndicies
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +25,7 @@ class HomeIllustViewModel(
         val recommendations: List<Illust> = emptyList(),
         val rankingIllusts: List<Illust> = emptyList(),
         val nextUrl: String? = null,
+        val indices: PageIndicies = PageIndicies(null,null,null),
         val isLoadingMore: Boolean = false,
         val errorMessage: String? = null
     )
@@ -33,6 +34,8 @@ class HomeIllustViewModel(
     val uiState: StateFlow<HomePageUiState> = _uiState.asStateFlow()
 
 
+
+    /*
     init {
         fetchInitialUserState()
     }
@@ -50,6 +53,7 @@ class HomeIllustViewModel(
             }
         }
     }
+     */
 
 
     /**
@@ -209,6 +213,28 @@ class HomeIllustViewModel(
             }
             // Return a new copy of the UI state containing the new list
             currentState.copy(recommendations = updatedRecommendations)
+        }
+    }
+
+    fun updateNavigationIndices(recommendationsIndex: Int?, subPageIndex: Int?, rankingIndex: Int?) {
+        _uiState.update { currentState ->
+            val newIndices = PageIndicies(
+                recommendationsCurrentIndex = recommendationsIndex,
+                subRecommendationsCurrentIndex = subPageIndex,
+                rankingCurrentIndex = rankingIndex
+            )
+            currentState.copy(indices = newIndices)
+        }
+    }
+
+    fun updateLastViewedIndex(index: Int) {
+        _uiState.update { currentState ->
+            // Decide whether to update the ranking or recommendations index
+            if (currentState.indices.rankingCurrentIndex != null) {
+                currentState.copy(indices = currentState.indices.copy(rankingCurrentIndex = index))
+            } else {
+                currentState.copy(indices = currentState.indices.copy(recommendationsCurrentIndex = index))
+            }
         }
     }
 

@@ -40,8 +40,11 @@ import com.example.pixvi.viewModels.HomeIllustViewModel
 import com.example.pixvi.viewModels.MangaViewModel
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
+import com.example.pixvi.network.api.PixivApiService
+import com.example.pixvi.network.response.Home.Illust.Illust
 import com.example.pixvi.screens.InteractiveFloatingToolbar
 import com.example.pixvi.screens.detail.DetailNovel
+import com.example.pixvi.screens.detail.FullImageScreen
 import com.example.pixvi.screens.homeScreen.IllustrationsScreen
 import com.example.pixvi.screens.homeScreen.MangaScreen
 import com.example.pixvi.screens.homeScreen.NewestScreen
@@ -53,6 +56,8 @@ import com.example.pixvi.viewModels.HomeNovelViewModelFactory
 import kotlinx.coroutines.launch
 import com.example.pixvi.viewModels.HomePageViewModelFactory
 import com.example.pixvi.viewModels.MangaViewModelFactory
+import com.example.pixvi.viewModels.ContentType
+
 
 
 sealed interface UiState {
@@ -132,11 +137,8 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            // REMOVED: The single composable for "MainAppShell" is gone.
-
-                            // ADDED: Individual routes for each content screen, wrapped in the shell.
                             composable(ContentRoutes.ILLUSTRATIONS) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
                                     IllustrationsScreen(
                                         modifier = Modifier.padding(padding),
                                         navController = rootNavController,
@@ -146,7 +148,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.MANGA) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
                                     MangaScreen(
                                         modifier = Modifier.padding(padding),
                                         navController = rootNavController,
@@ -156,7 +158,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.NOVEL) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
                                     NovelHomeScreen(
                                         modifier = Modifier.padding(padding),
                                         navController = rootNavController,
@@ -166,7 +168,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.NEWEST) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
                                     NewestScreen(
                                         //modifier = Modifier.padding(padding),
                                         navController = rootNavController
@@ -175,7 +177,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable(ContentRoutes.RANKING) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController) { padding ->
+                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
                                     RankingScreen(
                                         //modifier = Modifier.padding(padding),
                                         navController = rootNavController
@@ -184,15 +186,21 @@ class MainActivity : ComponentActivity() {
                             }
 
 
-                            // Other screens remain as they are.
-                            composable<FullImageScreen> { backStackEntry ->
-                                val args = backStackEntry.toRoute<FullImageScreen>()
-                                FullScreenImage(
-                                    illustId = args.illustId,
-                                    initialPageIndex = args.initialPageIndex,
-                                    originalImageUrls = args.originalImageUrls,
+                            // Other screens not realted to navigation
+
+
+                            composable<FullImageScreenRoute> { backStackEntry ->
+                                // Automatically deserialize the arguments into our data class
+                                val routeArgs = backStackEntry.toRoute<FullImageScreenRoute>()
+
+                                FullImageScreen(
+                                    contentType = routeArgs.contentType,
+                                    navController = rootNavController,
+                                    homeIllustViewModel = homeIllustViewModel,
+                                    mangaViewModel = mangaViewModel,
                                 )
                             }
+
                             composable<NovelDetailScreen>{backStackEntry ->
                                 val args = backStackEntry.toRoute<NovelDetailScreen>()
                                 DetailNovel(
@@ -276,10 +284,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @Serializable
-data class FullImageScreen(
-    val illustId: Int,
-    val initialPageIndex: Int,
-    val originalImageUrls: List<String>,
+data class FullImageScreenRoute(
+    val contentType: ContentType
 )
 
 @Serializable

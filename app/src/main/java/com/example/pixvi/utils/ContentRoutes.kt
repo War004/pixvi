@@ -6,4 +6,5 @@ object ContentRoutes {
     const val NOVEL = "novel"
     const val NEWEST = "newest"
     const val RANKING = "ranking"
+    const val FULLIMAGE = "FullImage"
 }

@@ -1,10 +1,14 @@
 package com.example.pixvi.network.response.Home.Illust
 
+import kotlinx.serialization.Serializable
+
 /**
  * Response that we expect while loading the home page under the illustrations filter
  *  url -> https://app-api.pixiv.net/v1/illust/recommended?filter=for_android&include_ranking_illusts=true&include_privacy_policy=true
  *  get response
  */
+
+//added Serializable to some hope no error shows up
 data class HomeIllust(
     val contest_exists: Boolean,
     val illusts: List<Illust>,
@@ -13,12 +17,14 @@ data class HomeIllust(
     val ranking_illusts: List<Illust> //structure of illusts and ranking_illusts are same
 )
 
+@Serializable
 data class CollaborateStatus(
     val collaborate_anonymous_flag: Boolean,
-    val collaborate_user_samples: List<Any>,
+    val collaborate_user_samples: List<String>,
     val collaborating: Boolean
 )
 
+@Serializable
 data class Illust(
     val caption: String,
     val create_date: String,
@@ -36,7 +42,7 @@ data class Illust(
     val restrict: Int,
     val restriction_attributes: List<String>?,
     val sanity_level: Int,
-    val series: Any?,
+    val series: Series?,
     val tags: List<Tag>,
     val title: String,
     val tools: List<String>,
@@ -49,12 +55,20 @@ data class Illust(
     val x_restrict: Int
 )
 
+@Serializable
+data class Series(
+    val id: Int,
+    val title: String
+)
+
+@Serializable
 data class ImageUrls(
     val large: String,
     val medium: String,
     val square_medium: String
 )
 
+@Serializable
 data class ImageUrlsX(
     val large: String,
     val medium: String,
@@ -62,34 +76,43 @@ data class ImageUrlsX(
     val square_medium: String
 )
 
+@Serializable
 data class MetaPage(
     val image_urls: ImageUrlsX
 )
 
+//waifu
+@Serializable
 data class MetaSinglePage(
-    val original_image_url: String
+    val original_image_url: String?
 )
 
+@Serializable
 data class PrivacyPolicy(
     val message: String,
     val version: String
 )
 
+@Serializable
 data class ProfileImageUrls(
     val medium: String
 )
 
+@Serializable
 data class Request(
     val request_info: RequestInfo,
     val request_users: List<RequestUser>
 )
 
+@Serializable
 data class RequestInfo(
     val collaborate_status: CollaborateStatus,
     val fan_user_id: Int,
     val role: String
 )
 
+
+@Serializable
 data class RequestUser(
     val account: String,
     val id: Int,
@@ -100,11 +123,13 @@ data class RequestUser(
     val profile_image_urls: ProfileImageUrls
 )
 
+@Serializable
 data class Tag(
     val name: String,
-    val translated_name: String
+    val translated_name: String?
 )
 
+@Serializable
 data class User(
     val account: String,
     val id: Int,

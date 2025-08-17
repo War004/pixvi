@@ -1,8 +1,6 @@
 package com.example.pixvi.screens.homeScreen
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,7 +36,6 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import android.os.Build
 import android.util.Log
-import android.util.LruCache
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
@@ -77,14 +74,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import coil.imageLoader
-import coil.request.ErrorResult
-import coil.request.SuccessResult
-import com.example.pixvi.FullImageScreen
 import com.example.pixvi.network.response.Home.ImageUtils
 import com.example.pixvi.network.response.Home.SaveAllFormat
 import com.example.pixvi.network.response.Home.SaveDestination
 import com.example.pixvi.viewModels.NotificationViewModel
-import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,7 +107,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.style.TextOverflow
-import coil.request.CachePolicy
+import com.example.pixvi.FullImageScreenRoute
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.screens.FloatingImageInfoToolbar
 import com.example.pixvi.utils.NormalImageRequest
@@ -123,6 +116,7 @@ import com.example.pixvi.viewModels.HomeIllustViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
+import com.example.pixvi.viewModels.ContentType
 
 private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_profile.png"
 
@@ -200,9 +194,8 @@ fun IllustrationsScreen(
                 focusedIndex = recommendationIndex
             }
     }
-    // --- END NEW ---
 
-    // Pagination (This existing effect remains unchanged)
+    // Pagination
     LaunchedEffect(listState, uiState.nextUrl, uiState.isLoadingMore) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
             .filterNotNull()
@@ -220,6 +213,20 @@ fun IllustrationsScreen(
                     }
                 }
             }
+    }
+
+    LaunchedEffect(uiState.indices.recommendationsCurrentIndex) {
+        val indexToScrollTo = uiState.indices.recommendationsCurrentIndex
+
+        if (indexToScrollTo != null && indexToScrollTo > 0) {
+
+            val rankingCarouselOffset = if (uiState.rankingIllusts.isNotEmpty()) 1 else 0
+            val absoluteIndex = indexToScrollTo + rankingCarouselOffset
+
+            if (absoluteIndex < listState.layoutInfo.totalItemsCount) {
+                listState.animateScrollToItem(index = absoluteIndex)
+            }
+        }
     }
 
     Box(
@@ -267,7 +274,15 @@ fun IllustrationsScreen(
                         item("ranking-carousel") {
                             RankingCarousel(
                                 illusts = uiState.rankingIllusts,
-                                navController = navController
+                                navController = navController,
+                                onItemClick = { index ->
+                                    homeIllustViewModel.updateNavigationIndices(
+                                        recommendationsIndex = null,
+                                        subPageIndex = 0,
+                                        rankingIndex = index
+                                    )
+                                    navController.navigate(FullImageScreenRoute(contentType = ContentType.ILLUST))
+                                }
                             )
                         }
                     }
@@ -279,7 +294,15 @@ fun IllustrationsScreen(
                         PixivImageRow(
                             illust = illust,
                             navController = navController,
-                            isFocused = index == focusedIndex
+                            isFocused = index == focusedIndex,
+                            onNavigate = { subPageIndex ->
+                                homeIllustViewModel.updateNavigationIndices(
+                                    recommendationsIndex = index,
+                                    subPageIndex = subPageIndex,
+                                    rankingIndex = null
+                                )
+                                navController.navigate(FullImageScreenRoute(contentType = ContentType.ILLUST))
+                            }
                         )
                     }
 
@@ -339,7 +362,8 @@ fun IllustrationsScreen(
 private fun RankingCarousel(
     illusts: List<Illust>,
     navController: NavController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onItemClick: (rankingIndex: Int) -> Unit
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -381,7 +405,11 @@ private fun RankingCarousel(
             contentPadding = PaddingValues(horizontal = 8.dp)
         ) { i ->
             val illust = illusts[i]
-            CarouselIllustItem(illust = illust, navController = navController)
+            CarouselIllustItem(
+                illustList = illusts,
+                illust = illust,
+                navController = navController,
+                onItemClick = { onItemClick(i) })
         }
     }
 }
@@ -389,9 +417,11 @@ private fun RankingCarousel(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CarouselItemScope.CarouselIllustItem(
+    illustList: List<Illust>,
     illust: Illust,
     navController: NavController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onItemClick: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -401,25 +431,7 @@ private fun CarouselItemScope.CarouselIllustItem(
             .fillMaxHeight()
             .maskClip(MaterialTheme.shapes.extraLarge)
             .clickable {
-                val allOriginalUrls = if (illust.page_count > 1 && illust.meta_pages.isNotEmpty()) {
-                    illust.meta_pages.map { it.image_urls.original }
-                } else {
-                    listOfNotNull(illust.meta_single_page.original_image_url)
-                }
-
-                if (allOriginalUrls.isNotEmpty()) {
-                    navController.navigate(
-                        FullImageScreen(
-                            illustId = illust.id,
-                            initialPageIndex = 0, // Carousel items always start at the first page
-                            originalImageUrls = allOriginalUrls,
-                        )
-                    )
-                } else {
-                    Toast
-                        .makeText(context, "Could not open image (no original URL)", Toast.LENGTH_SHORT)
-                        .show()
-                }
+                onItemClick()
             }
     ) {
         // The image serves as the background of the Box
@@ -455,7 +467,8 @@ private fun CarouselItemScope.CarouselIllustItem(
 fun PixivImageRow(
     illust: Illust,
     navController: NavController,
-    isFocused: Boolean // New parameter to control the highlight
+    isFocused: Boolean,
+    onNavigate: (subPageIndex: Int) -> Unit
 ) {
     val context = LocalContext.current
     val title = illust.title
@@ -509,24 +522,7 @@ fun PixivImageRow(
                 .combinedClickable(
                     onClick = {
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0
-                        val allOriginalUrls: List<String> = if (isMultiPage) {
-                            illust.meta_pages.map { it.image_urls.original }
-                        } else {
-                            listOfNotNull(illust.meta_single_page.original_image_url)
-                        }
-
-                        if (allOriginalUrls.isNotEmpty()) {
-                            navController.navigate(
-                                FullImageScreen(
-                                    illustId = illust.id,
-                                    initialPageIndex = currentPageIndex,
-                                    originalImageUrls = allOriginalUrls,
-                                )
-                            )
-                        } else {
-                            Toast.makeText(context, "Could not open image (no original URL)", Toast.LENGTH_SHORT).show()
-                            Log.e("PixivImageRow", "Could not find original image URL(s) for illust ID: ${illust.id}")
-                        }
+                        onNavigate(currentPageIndex)
                     },
                     onLongClick = {
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0
@@ -775,7 +771,7 @@ private fun ImageLoaderItem(
 }
 
 
-// Define states for imperative loading
+// imperative loading states
 private sealed class ImageLoadState {
     data object Loading : ImageLoadState()
     data class Success(val imageBitmap: ImageBitmap) : ImageLoadState()

@@ -1,7 +1,5 @@
 package com.example.pixvi.screens.homeScreen
 
-import android.graphics.Bitmap
-import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -14,9 +12,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,23 +29,17 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import coil.request.CachePolicy
 import coil.request.ErrorResult
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.example.pixvi.FullImageScreen
 import com.example.pixvi.network.response.Home.Manga.Illust
 import com.example.pixvi.network.response.Home.ImageUtils
 import com.example.pixvi.network.response.Home.SaveAllFormat
 import com.example.pixvi.network.response.Home.SaveDestination
 import com.example.pixvi.viewModels.MangaViewModel
-import com.google.gson.Gson
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
-import okhttp3.Headers
-import android.graphics.drawable.BitmapDrawable
-import android.util.LruCache
 import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.example.pixvi.screens.MaterialBottomSheetOptionsMenu
@@ -60,38 +49,21 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
-import java.util.Locale
-import kotlin.math.ln
-import kotlin.math.pow
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.sp
-import java.time.LocalDate
-import java.time.OffsetDateTime
-import java.time.format.DateTimeParseException
-import java.time.format.TextStyle as JavaDateTimeTextStyle
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.carousel.CarouselItemScope
 import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Dp
 import coil.imageLoader
+import com.example.pixvi.FullImageScreenRoute
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.network.response.Home.Manga.RankingIllust
 import com.example.pixvi.screens.FloatingImageInfoToolbar
 import com.example.pixvi.utils.NormalImageRequest
 import com.example.pixvi.utils.PixivAsyncImage
+import com.example.pixvi.viewModels.ContentType
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 
@@ -182,6 +154,20 @@ fun MangaScreen(
             }
     }
 
+    LaunchedEffect(uiState.indices.recommendationsCurrentIndex) {
+        val indexToScrollTo = uiState.indices.recommendationsCurrentIndex
+
+        if (indexToScrollTo != null && indexToScrollTo > 0) {
+
+            val rankingCarouselOffset = if (uiState.rankingIllusts.isNotEmpty()) 1 else 0
+            val absoluteIndex = indexToScrollTo + rankingCarouselOffset
+
+            if (absoluteIndex < listState.layoutInfo.totalItemsCount) {
+                listState.scrollToItem(index = absoluteIndex)
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -215,7 +201,6 @@ fun MangaScreen(
                 }
             }
             else -> {
-                // The LazyColumn is one child of the Box
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -227,7 +212,15 @@ fun MangaScreen(
                         item("manga-ranking-carousel") {
                             MangaRankingCarousel(
                                 illusts = uiState.rankingIllusts,
-                                navController = navController
+                                navController = navController,
+                                onItemClick = { index ->
+                                    mangaViewModel.updateNavigationIndices(
+                                        recommendationsIndex = null,
+                                        subPageIndex = 0,
+                                        rankingIndex = index
+                                    )
+                                    navController.navigate(FullImageScreenRoute(contentType = ContentType.MANGA))
+                                }
                             )
                         }
                     }
@@ -240,7 +233,15 @@ fun MangaScreen(
                         MangaItemRow(
                             mangaIllust = mangaIllust,
                             navController = navController,
-                            isFocused = index == focusedIndex
+                            isFocused = index == focusedIndex,
+                            onNavigate = { subPageIndex ->
+                                mangaViewModel.updateNavigationIndices(
+                                    recommendationsIndex = index,
+                                    subPageIndex = subPageIndex,
+                                    rankingIndex = null
+                                )
+                                navController.navigate(FullImageScreenRoute(contentType = ContentType.MANGA))
+                            }
                         )
                     }
                     item {
@@ -265,7 +266,7 @@ fun MangaScreen(
                             }
                         }
                     }
-                } // --- The LazyColumn scope ends here ---
+                }
 
                 // The Floating Toolbar is the second child of the Box
                 val focusedIllust = focusedIndex?.let { uiState.recommendations.getOrNull(it) }
@@ -298,6 +299,7 @@ fun MangaScreen(
 @Composable
 private fun MangaRankingCarousel(
     illusts: List<RankingIllust>,
+    onItemClick: (Int) -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier
 ) {
@@ -341,7 +343,11 @@ private fun MangaRankingCarousel(
             contentPadding = PaddingValues(horizontal = 8.dp)
         ) { i ->
             val illust = illusts[i]
-            CarouselMangaItem(illust = illust, navController = navController)
+            CarouselMangaItem(
+                illust = illust,
+                onClick = { onItemClick(i) },
+                navController = navController
+            )
         }
     }
 }
@@ -351,6 +357,7 @@ private fun MangaRankingCarousel(
 @Composable
 private fun CarouselItemScope.CarouselMangaItem(
     illust: RankingIllust, // Takes RankingIllust type
+    onClick: () -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier
 ) {
@@ -362,27 +369,7 @@ private fun CarouselItemScope.CarouselMangaItem(
         modifier = modifier
             .fillMaxHeight()
             .maskClip(MaterialTheme.shapes.extraLarge)
-            .clickable {
-                val allOriginalUrls = if (illust.page_count > 1 && illust.meta_pages.isNotEmpty()) {
-                    illust.meta_pages.map { it.image_urls.original }
-                } else {
-                    listOfNotNull(illust.meta_single_page.original_image_url)
-                }
-
-                if (allOriginalUrls.isNotEmpty()) {
-                    navController.navigate(
-                        FullImageScreen(
-                            illustId = illust.id,
-                            initialPageIndex = 0,
-                            originalImageUrls = allOriginalUrls,
-                        )
-                    )
-                } else {
-                    Toast
-                        .makeText(context, "Could not open image (no original URL)", Toast.LENGTH_SHORT)
-                        .show()
-                }
-            }
+            .clickable(onClick = onClick)
     ) {
         PixivAsyncImage(
             imageUrl = imageUrl,
@@ -415,7 +402,8 @@ private fun CarouselItemScope.CarouselMangaItem(
 fun MangaItemRow(
     mangaIllust: Illust,
     navController: NavController,
-    isFocused: Boolean
+    isFocused: Boolean,
+    onNavigate: (subPageIndex: Int) -> Unit
 ) {
     val context = LocalContext.current
     val title = mangaIllust.title
@@ -485,13 +473,16 @@ fun MangaItemRow(
                 .combinedClickable(
                     onClick = {
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0
+                        onNavigate(currentPageIndex)
                         val allOriginalUrls: List<String> = if (isMultiPage) {
                             mangaIllust.meta_pages.mapNotNull { it.image_urls.original }
                         } else {
                             listOfNotNull(mangaIllust.meta_single_page.original_image_url)
                         }
-
+                        //waifu
+                        /*
                         if (allOriginalUrls.isNotEmpty()) {
+
                             navController.navigate(
                                 FullImageScreen(
                                     illustId = mangaIllust.id,
@@ -501,7 +492,7 @@ fun MangaItemRow(
                             )
                         } else {
                             Toast.makeText(context, "Original image URL not found.", Toast.LENGTH_SHORT).show()
-                        }
+                        }*/
                     },
                     onLongClick = {
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0

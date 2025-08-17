@@ -20,7 +20,7 @@ object NormalImageRequest {
      */
     fun normalImageRequest(
         context: Context,
-        imageUrl: String,
+        imageUrl: String?,
         block: (ImageRequest.Builder) -> ImageRequest.Builder = { it }
     ): ImageRequest {
         val builder = ImageRequest.Builder(context)
@@ -50,17 +50,21 @@ object NormalImageRequest {
  */
 @Composable
 fun PixivAsyncImage(
-    imageUrl: String,
+    imageUrl: String?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    width: Int? = null,
+    height: Int? = null
 ) {
     val context = LocalContext.current
-    val imageRequest = remember(imageUrl, context) {
-        NormalImageRequest.normalImageRequest(
-            context = context,
-            imageUrl = imageUrl
-        )
+    val imageRequest = remember(imageUrl, context, width, height) {
+        NormalImageRequest.normalImageRequest(context, imageUrl) { builder ->
+            if (width != null && height != null) {
+                builder.size(width, height)
+            }
+            builder
+        }
     }
 
     // Call the original AsyncImage with your custom request

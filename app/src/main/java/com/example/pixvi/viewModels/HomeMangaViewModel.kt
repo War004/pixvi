@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.network.api.PixivApiService
-import com.example.pixvi.network.response.Home.Manga.Illust // Correct import for Manga Illust
+import com.example.pixvi.network.response.Home.Manga.Illust
 import com.example.pixvi.network.response.Home.Manga.RankingIllust
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,12 +15,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.IOException
+import com.example.pixvi.utils.PageIndicies
 
 data class MangaUiState(
     val isLoading: Boolean = false,
     val recommendations: List<Illust> = emptyList(),
     val rankingIllusts: List<RankingIllust> = emptyList(),
     val nextUrl: String? = null,
+    val indices: PageIndicies = PageIndicies(null,null,null),
     val isLoadingMore: Boolean = false,
     val errorMessage: String? = null
 )
@@ -169,6 +171,26 @@ class MangaViewModel(
             }
             // Return a new copy of the UI state containing the new list
             currentState.copy(recommendations = updatedRecommendations)
+        }
+    }
+    fun updateNavigationIndices(recommendationsIndex: Int?, subPageIndex: Int?, rankingIndex: Int?) {
+        _uiState.update { currentState ->
+            val newIndices = PageIndicies(
+                recommendationsCurrentIndex = recommendationsIndex,
+                subRecommendationsCurrentIndex = subPageIndex,
+                rankingCurrentIndex = rankingIndex
+            )
+            currentState.copy(indices = newIndices)
+        }
+    }
+
+    fun updateLastViewedIndex(index: Int) {
+        _uiState.update { currentState ->
+            if (currentState.indices.rankingCurrentIndex != null) {
+                currentState.copy(indices = currentState.indices.copy(rankingCurrentIndex = index))
+            } else {
+                currentState.copy(indices = currentState.indices.copy(recommendationsCurrentIndex = index))
+            }
         }
     }
 

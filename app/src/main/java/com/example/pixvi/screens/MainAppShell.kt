@@ -19,8 +19,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.FiberNew
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.PhotoAlbum
 import androidx.compose.material3.*
@@ -52,6 +54,11 @@ import com.example.pixvi.network.response.AppLoading.CurrentAccountManager
 import com.example.pixvi.utils.ContentRoutes
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.viewModelScope
+import com.example.pixvi.network.api.PixivApiService
+import com.example.pixvi.utils.PixivAsyncImage
+import com.example.pixvi.viewModels.MainAppShellViewModel
 
 
 private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_profile.png"
@@ -61,16 +68,21 @@ private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_p
 fun MainAppShell(
     authViewModel: AuthViewModel,
     rootNavController: NavController,
+    pixivApiService: PixivApiService,
+    viewModel: MainAppShellViewModel = remember { MainAppShellViewModel(pixivApiService) },
     content: @Composable (PaddingValues) -> Unit
 ) {
     val TAG = "MainAppShell"
     Log.d(TAG, "MainAppShell composing - rootNavController: ${rootNavController.hashCode()}")
 
     val loginState by authViewModel.loginState.collectAsState()
-    var showProfileMenu by remember { mutableStateOf(false) }
-    var navigatingToLogin by remember { mutableStateOf(false) }
+    val showProfileMenu by viewModel.showProfileMenu.collectAsState()
+    val showHomeDropdownMenu by viewModel.showHomeDropdownMenu.collectAsState()
+    val navigatingToLogin by viewModel.navigatingToLogin.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val isSearchFieldFocused by viewModel.isSearchFieldFocused.collectAsState()
+
     val context = LocalContext.current
-    var showHomeDropdownMenu by remember { mutableStateOf(false) }
 
     val navBackStackEntry by rootNavController.currentBackStackEntryAsState()
     val currentContentRoute = navBackStackEntry?.destination?.route
@@ -87,18 +99,18 @@ fun MainAppShell(
 
     LaunchedEffect(loginState, navigatingToLogin) {
         if (loginState !is LoginState.Success && !navigatingToLogin) {
-            navigatingToLogin = true
-            // This now correctly pops the entire backstack and goes to Login
+            viewModel.setNavigatingToLogin(true)
             rootNavController.navigate("LoginScreen") {
                 popUpTo(rootNavController.graph.id) { inclusive = true }
                 launchSingleTop = true
             }
         } else if (loginState is LoginState.Success) {
-            navigatingToLogin = false
+            viewModel.setNavigatingToLogin(false)
         }
     }
 
     if (loginState is LoginState.Success) {
+
         val currentUser by CurrentAccountManager.currentAccount.collectAsStateWithLifecycle()
         val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -111,19 +123,14 @@ fun MainAppShell(
         val interactionSource = remember { MutableInteractionSource() }
         val isTextFieldFocused by interactionSource.collectIsFocusedAsState()
 
+        // Update ViewModel when focus changes
+        LaunchedEffect(isTextFieldFocused) {
+            viewModel.setSearchFieldFocused(isTextFieldFocused)
+        }
 
+        // Update ViewModel when text changes
         LaunchedEffect(textFieldState.text) {
-            val currentQuery = textFieldState.text.toString()
-
-            /*TODO autosuggest endpoint logic goes here*/
-            // For example:
-            if (currentQuery.isNotBlank()) {
-                /*TODO autosuggest with latency*/
-            }
-            else{
-                /*Nothing*/
-            }
-            // }
+            viewModel.updateSearchQuery(textFieldState.text.toString())
         }
 
         ModalNavigationDrawer(
@@ -139,36 +146,44 @@ fun MainAppShell(
                             label = {Text("Bookmarks")},
                             icon = {Icon(Icons.Default.FavoriteBorder,"Option to show bookmarks")},
                             selected = false,
-                            onClick = {
-                                Toast.makeText(context, "Bookmarks Clicked (TODO)", Toast.LENGTH_SHORT).show()
-                                scope.launch { drawerState.close() }
+                            onClick ={
+                                viewModel.handleDrawerItemClick {
+                                    Toast.makeText(context, "Bookmarks Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                    scope.launch { drawerState.close() }
+                                }
                             }
                         )
                         NavigationDrawerItem(
                             label = {Text("History")},
                             icon = {Icon(Icons.Default.History,"Option to show history")},
                             selected = false,
-                            onClick = {
-                                Toast.makeText(context, "History Clicked (TODO)", Toast.LENGTH_SHORT).show()
-                                scope.launch { drawerState.close() }
+                            onClick ={
+                                viewModel.handleDrawerItemClick {
+                                    Toast.makeText(context, "History Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                    scope.launch { drawerState.close() }
+                                }
                             }
                         )
                         NavigationDrawerItem(
                             label = {Text("Filtered Work History")},
                             icon = {Icon(Icons.Default.HistoryToggleOff,"Option to show the list of filtered through custom tags")},
                             selected = false,
-                            onClick = {
-                                Toast.makeText(context, "Filtered History Clicked (TODO)", Toast.LENGTH_SHORT).show()
-                                scope.launch { drawerState.close() }
+                            onClick ={
+                                viewModel.handleDrawerItemClick {
+                                    Toast.makeText(context, "Filtered Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                    scope.launch { drawerState.close() }
+                                }
                             }
                         )
                         NavigationDrawerItem(
                             label = {Text("Settings")},
                             icon = {Icon(Icons.Default.Settings,"Option to show setting menu")},
                             selected = false,
-                            onClick = {
-                                Toast.makeText(context, "Settings Clicked (TODO)", Toast.LENGTH_SHORT).show()
-                                scope.launch { drawerState.close() }
+                            onClick ={
+                                viewModel.handleDrawerItemClick {
+                                    Toast.makeText(context, "Setting Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                    scope.launch { drawerState.close() }
+                                }
                             }
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -238,7 +253,7 @@ fun MainAppShell(
                                     imeAction = ImeAction.Search
                                 ),
                                 onKeyboardAction = {
-                                    /*Load the search results*/
+                                    viewModel.performSearch()
                                     focusManager.clearFocus()
                                 },
                                 decorator = { innerTextField ->
@@ -287,22 +302,23 @@ fun MainAppShell(
                             Row(verticalAlignment = Alignment.CenterVertically) {
 
                                 Box {
-                                    IconButton(onClick = { showHomeDropdownMenu = true }) {
+                                    IconButton(onClick = { viewModel.setShowHomeDropdownMenu(true) }) {
                                         Icon(painter = iconPainter, contentDescription = "Selected screen icon")
                                     }
                                     DropdownMenu(
                                         expanded = showHomeDropdownMenu,
-                                        onDismissRequest = { showHomeDropdownMenu = false }
+                                        onDismissRequest = { viewModel.setShowHomeDropdownMenu(false) }
                                     ) {
                                         DropdownMenuItem(
                                             text = { Text("Illustrations") },
                                             onClick = {
-                                                showHomeDropdownMenu = false
-                                                if (currentContentRoute != ContentRoutes.ILLUSTRATIONS) {
-                                                    rootNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
-                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                                        launchSingleTop = true
-                                                        restoreState = true
+                                                viewModel.handleHomeDropdownAction {
+                                                    if (currentContentRoute != ContentRoutes.ILLUSTRATIONS) {
+                                                        rootNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
+                                                            popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                                            launchSingleTop = true
+                                                            restoreState = true
+                                                        }
                                                     }
                                                 }
                                             },
@@ -311,12 +327,13 @@ fun MainAppShell(
                                         DropdownMenuItem(
                                             text = { Text("Manga") },
                                             onClick = {
-                                                showHomeDropdownMenu = false
-                                                if (currentContentRoute != ContentRoutes.MANGA) {
-                                                    rootNavController.navigate(ContentRoutes.MANGA) {
-                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                                        launchSingleTop = true
-                                                        restoreState = true
+                                                viewModel.handleHomeDropdownAction{
+                                                    if (currentContentRoute != ContentRoutes.MANGA) {
+                                                        rootNavController.navigate(ContentRoutes.MANGA) {
+                                                            popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                                            launchSingleTop = true
+                                                            restoreState = true
+                                                        }
                                                     }
                                                 }
                                             },
@@ -325,12 +342,13 @@ fun MainAppShell(
                                         DropdownMenuItem(
                                             text = { Text("Novel") },
                                             onClick = {
-                                                showHomeDropdownMenu = false
-                                                if (currentContentRoute != ContentRoutes.NOVEL) {
-                                                    rootNavController.navigate(ContentRoutes.NOVEL) {
-                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                                        launchSingleTop = true
-                                                        restoreState = true
+                                                viewModel.handleHomeDropdownAction{
+                                                    if (currentContentRoute != ContentRoutes.NOVEL) {
+                                                        rootNavController.navigate(ContentRoutes.NOVEL) {
+                                                            popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                                            launchSingleTop = true
+                                                            restoreState = true
+                                                        }
                                                     }
                                                 }
                                             },
@@ -339,12 +357,13 @@ fun MainAppShell(
                                         DropdownMenuItem(
                                             text = { Text("Newest") },
                                             onClick = {
-                                                showHomeDropdownMenu = false
-                                                if (currentContentRoute != ContentRoutes.NEWEST) {
-                                                    rootNavController.navigate(ContentRoutes.NEWEST) {
-                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                                        launchSingleTop = true
-                                                        restoreState = true
+                                                viewModel.handleHomeDropdownAction{
+                                                    if (currentContentRoute != ContentRoutes.NEWEST) {
+                                                        rootNavController.navigate(ContentRoutes.NEWEST) {
+                                                            popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                                            launchSingleTop = true
+                                                            restoreState = true
+                                                        }
                                                     }
                                                 }
                                             },
@@ -353,12 +372,13 @@ fun MainAppShell(
                                         DropdownMenuItem(
                                             text = { Text("Ranking") },
                                             onClick = {
-                                                showHomeDropdownMenu = false
-                                                if (currentContentRoute != ContentRoutes.RANKING) {
-                                                    rootNavController.navigate(ContentRoutes.NEWEST) {
-                                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                                        launchSingleTop = true
-                                                        restoreState = true
+                                                viewModel.handleHomeDropdownAction{
+                                                    if (currentContentRoute != ContentRoutes.RANKING) {
+                                                        rootNavController.navigate(ContentRoutes.NEWEST) {
+                                                            popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                                            launchSingleTop = true
+                                                            restoreState = true
+                                                        }
                                                     }
                                                 }
                                             },
@@ -366,7 +386,7 @@ fun MainAppShell(
                                         )
                                     }
                                 }
-                                IconButton(onClick = { showProfileMenu = true }) {
+                                IconButton(onClick = { viewModel.setShowProfileMenu(true) }) {
                                     val user = currentUser
                                     if (user != null) {
                                         val mediumImageUrl = user.profileImageUrls?.medium
@@ -378,14 +398,9 @@ fun MainAppShell(
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         } else {
-                                            AsyncImage(
-                                                model = ImageRequest.Builder(LocalContext.current)
-                                                    .data(mediumImageUrl)
-                                                    .crossfade(true)
-                                                    .placeholder(R.drawable.ic_launcher_background)
-                                                    .error(R.drawable.ic_launcher_background)
-                                                    .build(),
-                                                contentDescription = "Profile Menu",
+                                            PixivAsyncImage(
+                                                imageUrl = mediumImageUrl,
+                                                contentDescription = "Profile Menu button",
                                                 modifier = Modifier.size(32.dp).clip(CircleShape),
                                                 contentScale = ContentScale.Crop
                                             )
@@ -411,6 +426,7 @@ fun MainAppShell(
 
                 if (isTextFieldFocused) {
                     BackHandler {
+                        viewModel.clearSearchFocus()
                         focusManager.clearFocus()
                     }
 
@@ -424,6 +440,7 @@ fun MainAppShell(
                                 indication = null // No ripple effect
                             ) {
                                 // When the overlay is clicked, clear focus.
+                                viewModel.clearSearchFocus()
                                 focusManager.clearFocus()
                             }
                     )
@@ -431,18 +448,20 @@ fun MainAppShell(
             }
             ProfileMenu(
                 showMenu = showProfileMenu,
-                onDismissRequest = { showProfileMenu = false },
+                onDismissRequest = {viewModel.setShowProfileMenu(false) },
                 currentUserName = currentUser?.name ?: "Guest User",
                 currentUserId = currentUser?.pixivId?.toString() ?: "N/A",
                 currentUserAvatarUrl = currentUser?.profileImageUrls?.medium,
                 currentUserNotificationCount = 0, // Placeholder
                 onManagePixivAccountClick = {
-                    showProfileMenu = false
-                    Toast.makeText(context, "Manage Pixiv Account Clicked", Toast.LENGTH_SHORT).show()
+                    viewModel.handleProfileMenuAction {
+                        Toast.makeText(context, "Manage Pixiv Account Clicked", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 onNotificationsClick = {
-                    showProfileMenu = false
-                    rootNavController.navigate("NotificationScreen")
+                    viewModel.handleProfileMenuAction {
+                        rootNavController.navigate("NotificationScreen")
+                    }
                 }
             )
         }
@@ -455,6 +474,103 @@ fun MainAppShell(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("If you are seeing this message that means, you have opened the app during the login process.")
             Text("Please continue with the login or reopen the app.")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true, showSystemUi = false)
+@Composable
+fun SearchFiled(){
+    var searchQuery by remember { mutableStateOf("") }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    //Searchable link or text
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = {
+                            /*TODO search endpoint*/
+                            searchQuery = it
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+
+                        textStyle = LocalTextStyle.current,
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        singleLine = true,
+                        decorationBox = { innerTextField ->
+                            Row(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { /*TODO filter logic to be done*/ }) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.filter_icon),
+                                        //imageVector = Icons.Outlined.Tune,
+                                        contentDescription = "Tune Icon"
+                                    )
+                                }
+
+                                Box(modifier = Modifier.weight(1f)) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search or enter URL",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    // This is the actual, interactive text input field
+                                    innerTextField()
+                                }
+                            }
+                        }
+                    )
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {}
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Menu,
+                            contentDescription = "Menu Icon"
+                        )
+                    }
+                },
+                actions = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ){
+                        IconButton(
+                            onClick = {/*TODO launching the dropdown menu*/}
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Home,
+                                contentDescription = "Home Icon"
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {/*TODO account options}*/}
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AccountCircle,
+                                contentDescription = "Account Icon"
+                            )
+                        }
+                    }
+                }
+            )
+        }
+
+    ){ innerPadding ->
+        Row(
+            modifier = Modifier.padding(innerPadding)
+        ){
+
         }
     }
 }
