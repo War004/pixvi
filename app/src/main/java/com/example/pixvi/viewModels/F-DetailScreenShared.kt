@@ -4,12 +4,10 @@ package com.example.pixvi.viewModels
 
 import android.util.Log
 import androidx.compose.runtime.Stable
+import com.example.pixvi.network.response.Home.Illust
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import com.example.pixvi.network.response.Home.Illust.Illust as IllustModel
-import com.example.pixvi.network.response.Home.Manga.Illust as MangaModel
-import com.example.pixvi.network.response.Home.Manga.RankingIllust as MangaRankingModel
 
 /**
  * Defines the user-selectable image quality options.
@@ -37,13 +35,7 @@ data class DetailScreenState(
     val nextUrl: String? = null,
 )
 
-/**
- * Enum to define the content type in a type-safe way for navigation.
- */
-enum class ContentType {
-    ILLUST,
-    MANGA
-}
+
 
 /**
  * A unified data class that the UI will use. This is the "Adapter" pattern.
@@ -67,7 +59,7 @@ data class DisplayableItem(
 
 // --- Mapper Functions ---
 
-fun IllustModel.toDisplayableItem(): DisplayableItem {
+fun Illust.toDisplayableItem(): DisplayableItem {
     val mediumUrls = if (this.page_count > 1) this.meta_pages.map { it.image_urls.medium } else listOf(this.image_urls.medium)
     val largeUrls = if (this.page_count > 1) this.meta_pages.map { it.image_urls.large } else listOf(this.image_urls.large)
     val originalUrls = if (this.page_count > 1) this.meta_pages.map { it.image_urls.original } else listOfNotNull(this.meta_single_page.original_image_url)
@@ -87,7 +79,7 @@ fun IllustModel.toDisplayableItem(): DisplayableItem {
         originalImageUrls = originalUrls
     )
 }
-
+/*
 fun MangaModel.toDisplayableItem(): DisplayableItem {
     val mediumUrls = if (this.page_count > 1) this.meta_pages.map { it.image_urls.medium } else listOf(this.image_urls.medium)
     val largeUrls = if (this.page_count > 1) this.meta_pages.map { it.image_urls.large } else listOf(this.image_urls.large)
@@ -129,7 +121,7 @@ fun MangaRankingModel.toDisplayableItem(): DisplayableItem {
         originalImageUrls = originalUrls
     )
 }
-
+*/
 /**
  * Point 4: Defensive date formatting.
  * This helper function safely parses the date string and returns a formatted

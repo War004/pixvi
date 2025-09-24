@@ -1,5 +1,8 @@
 package com.example.pixvi.viewModels
 
+import android.util.Log
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,9 +11,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.example.pixvi.network.api.PixivApiService
 import com.example.pixvi.network.response.AppLoading.CurrentAccountManager
+import com.example.pixvi.repo.BatterySaverThemeRepository
+import com.example.pixvi.settings.SettingsRepository
 
 class MainAppShellViewModel(
-    private val pixivApiService: PixivApiService
+    private val pixivApiService: PixivApiService,
+    val settingsRepository: SettingsRepository,
+    isBatterySaver: BatterySaverThemeRepository
 ) : ViewModel() {
 
     // UI State
@@ -29,6 +36,8 @@ class MainAppShellViewModel(
 
     private val _isSearchFieldFocused = MutableStateFlow(false)
     val isSearchFieldFocused: StateFlow<Boolean> = _isSearchFieldFocused.asStateFlow()
+
+    val isPowerSaverTheme: StateFlow<Boolean> = isBatterySaver.batterSaver
 
     init {
         initializeUserState()
@@ -49,6 +58,16 @@ class MainAppShellViewModel(
         }
     }
 
+    fun changeUserBatteryTheme(choice: Boolean) {
+        viewModelScope.launch {
+            try{
+                settingsRepository.setBatterySaverFlag(choice)
+                Log.e("Setting Repo, Battery flag","The new value of battery saver: ${choice}")
+            } catch (e: Exception){
+                Log.e("Setting Repo, Battery flag",e.message?:"Empty")
+            }
+        }
+    }
     // UI State Management
     fun setShowProfileMenu(show: Boolean) {
         _showProfileMenu.value = show

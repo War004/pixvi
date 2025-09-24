@@ -1,5 +1,7 @@
 package com.example.pixvi.network.response.Home.Novels
 
+import android.R
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.text.AnnotatedString
 
 /**
@@ -87,12 +89,14 @@ data class Series(
     val title: String
 )
 
+@Immutable
 data class Tag(
     val added_by_uploaded_user: Boolean,
     val name: String,
     val translated_name: String
 )
 
+@Immutable
 data class User(
     val account: String,
     val id: Int,
@@ -104,12 +108,13 @@ data class User(
 
 
 //Custom  for ui state
+@Immutable
 data class NovelForDisplay(
     val id: Int,
     val title: String,
     val user: User,
     val image_urls: ImageUrls,
-    val caption: String, // Keep the original for features like "copy raw text"
+    val caption: String,
     val page_count: Int,
     val text_length: Int,
     val total_view: Int,
@@ -117,6 +122,4 @@ data class NovelForDisplay(
     val total_comments: Int,
     val is_bookmarked: Boolean,
     val tags: List<Tag>,
-    // The new, pre-processed field that makes the UI fast.
-    val parsedCaption: AnnotatedString
 )

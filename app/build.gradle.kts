@@ -31,8 +31,8 @@ android {
             )
         }
         debug {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -75,7 +75,9 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.material)
 
-    // Lifecycle components
+    //coil tranfomation
+    implementation(libs.coil.transformations)
+
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -115,9 +117,9 @@ dependencies {
     implementation(libs.androidx.browser)
 
     // Image Loading and animated images
-    implementation(libs.coil.compose)
-    implementation(libs.coil.gif)
-
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.coil3.coil.compose)
+    implementation(libs.coil3.coil.gif)
     //Extended Icons
     implementation(libs.androidx.material.icons.extended)
 

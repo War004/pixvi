@@ -32,7 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import coil.request.ImageRequest
+import coil3.request.ImageRequest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import android.os.Build
 import android.util.Log
@@ -45,8 +45,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.flow.filterNotNull
-import coil.compose.AsyncImage
-import com.example.pixvi.network.response.Home.Illust.Illust
+import coil3.compose.AsyncImage
+import com.example.pixvi.network.response.Home.Illust
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -73,7 +73,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
-import coil.imageLoader
+import coil3.imageLoader
 import com.example.pixvi.network.response.Home.ImageUtils
 import com.example.pixvi.network.response.Home.SaveAllFormat
 import com.example.pixvi.network.response.Home.SaveDestination
@@ -107,16 +107,21 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.style.TextOverflow
+import coil3.SingletonImageLoader
+import coil3.compose.AsyncImagePainter
+import coil3.request.allowHardware
+import coil3.toBitmap
 import com.example.pixvi.FullImageScreenRoute
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.screens.FloatingImageInfoToolbar
+import com.example.pixvi.screens.detail.ContentType
 import com.example.pixvi.utils.NormalImageRequest
 import com.example.pixvi.utils.PixivAsyncImage
+import com.example.pixvi.utils.UiEvent
 import com.example.pixvi.viewModels.HomeIllustViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
-import com.example.pixvi.viewModels.ContentType
 
 private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_profile.png"
 
@@ -135,6 +140,8 @@ fun IllustrationsScreen(
 
     val scope = rememberCoroutineScope()
 
+    val context = LocalContext.current
+
     val favoriteRequestFlow = remember {
         MutableSharedFlow<Pair<Illust, BookmarkRestrict>>(extraBufferCapacity = 1)
     }
@@ -143,13 +150,27 @@ fun IllustrationsScreen(
         favoriteRequestFlow
             .debounce(400L) // Debounce for 400 milliseconds.
             .collect { (illust, visibility) ->
-                // This code runs only after 400ms of inactivity
-                homeIllustViewModel.toggleBookmark(
+                homeIllustViewModel.bookmarkToggled(
                     illustId = illust.id.toLong(),
                     isCurrentlyBookmarked = illust.is_bookmarked,
                     visibility = visibility
                 )
             }
+    }
+
+    LaunchedEffect(homeIllustViewModel) {
+        homeIllustViewModel.uiEvents.collect { event ->
+
+            when(event){
+                is UiEvent.ShowToast -> Toast.makeText(
+                    context,
+                    event.message,
+                    Toast.LENGTH_SHORT).show()
+                else -> {
+                    /*Nothing in the Home screen*/
+                }
+            }
+        }
     }
 
 
@@ -475,7 +496,7 @@ fun PixivImageRow(
     val isMultiPage = illust.page_count > 1 && illust.meta_pages.isNotEmpty()
     val pageCount = if (isMultiPage) illust.meta_pages.size else illust.page_count
 
-    val imageLoadStates = remember { mutableStateMapOf<Int, Boolean>() } //image states for showing the bottom sheet
+    val imageLoadStates = remember { mutableStateMapOf<Int, Boolean>() }
 
     val aspectRatio = if (illust.width > 0 && illust.height > 0) {
         illust.width.toFloat() / illust.height.toFloat()
@@ -549,7 +570,9 @@ fun PixivImageRow(
                         getImageUrl = getImageUrl,
                         contentDescription = "$title (Page ${pageIndex + 1})",
                         context = context,
-                        imageLoadStates = imageLoadStates
+                        onLoadStateChange = { isLoaded ->
+                            imageLoadStates[pageIndex] = isLoaded
+                        }
                     )
                 }
             } else { // Single page image
@@ -558,7 +581,9 @@ fun PixivImageRow(
                     getImageUrl = getImageUrl,
                     contentDescription = title,
                     context = context,
-                    imageLoadStates = imageLoadStates
+                    onLoadStateChange = { isLoaded ->
+                        imageLoadStates[0] = isLoaded
+                    }
                 )
             }
 
@@ -635,17 +660,19 @@ fun PixivImageRow(
 
                             var copiedFromCache = false
                             if (displayedImageUrl != null) {
-                                val cacheKey = coil.memory.MemoryCache.Key(displayedImageUrl)
+                                val cacheKey = coil3.memory.MemoryCache.Key(displayedImageUrl)
 
                                 // 3. Check Coil's memory cache for the bitmap
-                                context.imageLoader.memoryCache?.let { cache ->
-                                    val cachedBitmap = cache[cacheKey]?.bitmap
-                                    if (cachedBitmap != null) {
+                                SingletonImageLoader.get(context).memoryCache?.let { cache ->
+                                    val cachedImage  = cache[cacheKey]?.image
+                                    if (cachedImage  != null) {
                                         Log.d("FastCopy", "Found bitmap in Coil's memory cache.")
                                         try {
+                                            val bitmap = cachedImage.toBitmap()
+
                                             ImageUtils.copyBitmapToClipboardViaCache(
                                                 context,
-                                                cachedBitmap,
+                                                bitmap,
                                                 illust.id,
                                                 currentPageIndex
                                             )
@@ -743,19 +770,25 @@ private fun ImageLoaderItem(
     getImageUrl: (Int) -> String?,
     contentDescription: String,
     context: Context,
-    imageLoadStates: MutableMap<Int, Boolean>
+    // Change this to a lambda to report the state change
+    onLoadStateChange: (Boolean) -> Unit
 ) {
     val imageUrl = getImageUrl(pageIndex) ?: return
 
-    DisposableEffect(pageIndex) {
-        onDispose {
-            imageLoadStates.remove(pageIndex)
+    var lastReportedState by remember { mutableStateOf<Boolean?>(null) }
+    var currentState by remember { mutableStateOf<AsyncImagePainter.State>(
+        AsyncImagePainter.State.Empty) }
+
+    LaunchedEffect(currentState) {
+        val isSuccess = currentState is AsyncImagePainter.State.Success
+        if (lastReportedState != isSuccess) {
+            onLoadStateChange(isSuccess)
+            lastReportedState = isSuccess
         }
     }
 
-    // The request no longer needs a listener attached here.
     val imageRequest = remember(imageUrl) {
-        NormalImageRequest.normalImageRequest(context, imageUrl ?: "")
+        NormalImageRequest.normalImageRequest(context, imageUrl)
     }
 
     AsyncImage(
@@ -763,9 +796,8 @@ private fun ImageLoaderItem(
         contentDescription = contentDescription,
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,
-        // This is the only part you need to update the state.
         onState = { state ->
-            imageLoadStates[pageIndex] = state is coil.compose.AsyncImagePainter.State.Success
+            currentState = state
         }
     )
 }
@@ -870,31 +902,26 @@ fun FullScreenImage(
             return@LaunchedEffect
         }
 
-        val request = ImageRequest.Builder(context)
-            .data(initialImageUrl)
-            .headers(commonHeaders)
-            .allowHardware(false) // Important for getting Bitmap directly for transformations
-            .listener(
-                onStart = { Log.d("FullScreenImage", "Request Started: $initialImageUrl") },
-                onSuccess = { _, result ->
-                    val drawable: Drawable = result.drawable
-                    val bitmap = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                    if (bitmap != null) {
+        val request = NormalImageRequest.normalImageRequest(context, initialImageUrl) { builder ->
+            builder
+                .allowHardware(false) // Important for getting Bitmap directly for transformations
+                .listener(
+                    onStart = { Log.d("FullScreenImage", "Request Started: $initialImageUrl") },
+                    onSuccess = { _, result ->
+                        val image = result.image  // Changed from result.drawable to result.image
+                        val bitmap = image.toBitmap()  // Convert Image to Bitmap
                         bitmapSize = IntSize(bitmap.width, bitmap.height)
                         imageLoadState = ImageLoadState.Success(bitmap.asImageBitmap())
                         Log.d("FullScreenImage", "Success - Bitmap size: $bitmapSize")
-                    } else {
-                        val errorMsg = "Could not get Bitmap from Drawable: ${drawable::class.java.name}"
-                        Log.e("FullScreenImage", errorMsg)
-                        imageLoadState = ImageLoadState.Error(IllegalStateException(errorMsg))
+                    },
+                    onError = { _, result ->
+                        Log.e("FullScreenImage", "Request Error", result.throwable)
+                        imageLoadState = ImageLoadState.Error(result.throwable)
                     }
-                },
-                onError = { _, result ->
-                    Log.e("FullScreenImage", "Request Error", result.throwable)
-                    imageLoadState = ImageLoadState.Error(result.throwable)
-                }
-            ).build()
-        context.imageLoader.execute(request)
+                )
+        }
+
+        SingletonImageLoader.get(context).execute(request)  // Changed from context.imageLoader
     }
 
     val density = LocalDensity.current

@@ -1,7 +1,6 @@
 package com.example.pixvi
 
 import android.content.ContentValues.TAG
-import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -28,8 +26,6 @@ import com.example.pixvi.login.AuthViewModel
 import com.example.pixvi.network.api.RetrofitClient
 import com.example.pixvi.preview.NotificationScreen
 import com.example.pixvi.screens.LoginScreen
-import com.example.pixvi.screens.MainAppShell
-import com.example.pixvi.screens.homeScreen.FullScreenImage
 import com.example.pixvi.ui.theme.PixviTheme
 import com.example.pixvi.viewModels.NotificationViewModel
 import kotlinx.serialization.Serializable
@@ -39,25 +35,12 @@ import androidx.lifecycle.lifecycleScope
 import com.example.pixvi.viewModels.HomeIllustViewModel
 import com.example.pixvi.viewModels.MangaViewModel
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.padding
-import com.example.pixvi.network.api.PixivApiService
-import com.example.pixvi.network.response.Home.Illust.Illust
-import com.example.pixvi.screens.InteractiveFloatingToolbar
 import com.example.pixvi.screens.detail.DetailNovel
 import com.example.pixvi.screens.detail.FullImageScreen
-import com.example.pixvi.screens.homeScreen.IllustrationsScreen
-import com.example.pixvi.screens.homeScreen.MangaScreen
-import com.example.pixvi.screens.homeScreen.NewestScreen
-import com.example.pixvi.screens.homeScreen.NovelHomeScreen
-import com.example.pixvi.screens.homeScreen.RankingScreen
-import com.example.pixvi.utils.ContentRoutes
 import com.example.pixvi.viewModels.HomeNovelViewModel
 import com.example.pixvi.viewModels.HomeNovelViewModelFactory
 import kotlinx.coroutines.launch
-import com.example.pixvi.viewModels.HomePageViewModelFactory
-import com.example.pixvi.viewModels.MangaViewModelFactory
-import com.example.pixvi.viewModels.ContentType
-
+import com.example.pixvi.screens.detail.ContentType
 
 
 sealed interface UiState {
@@ -68,12 +51,15 @@ sealed interface UiState {
 class MainActivity : ComponentActivity() {
     private lateinit var authViewModel: AuthViewModel
 
+    private val app by lazy { application as MyApplication }
+
     private val homeIllustViewModel: HomeIllustViewModel by viewModels {
-        HomePageViewModelFactory(RetrofitClient.apiService)
+        app.appContainer.viewModelFactory
     }
     private val mangaViewModel: MangaViewModel by viewModels {
-        MangaViewModelFactory(RetrofitClient.apiService)
+        app.appContainer.viewModelFactory
     }
+
     private val homeINovelViewModel: HomeNovelViewModel by viewModels {
         HomeNovelViewModelFactory(
             application = application,
@@ -83,6 +69,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_HANDLE_AUTH_REDIRECT = "com.example.pixvi.HANDLE_AUTH_REDIRECT"
+        const val MAIN_CONTENT_ROUTE = "main_content"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,11 +77,14 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
+        authViewModel = ViewModelProvider(this)[AuthViewModel::class.java]
+        authViewModel.initialize(this)
+        RetrofitClient.initialize(authViewModel)
+
         var uiState: UiState by mutableStateOf(UiState.Loading)
 
         lifecycleScope.launch {
-            // MODIFIED: Start destination is now the default content route, not the shell
-            val destination = if (hasSavedToken(this@MainActivity)) ContentRoutes.ILLUSTRATIONS else "LoginScreen"
+            val destination = if (authViewModel.checkLoggedIn()) MAIN_CONTENT_ROUTE else "LoginScreen" //Illusation screen is the default screen.
             Log.d(TAG, "Initial destination determined: $destination")
             uiState = UiState.Success(destination)
         }
@@ -102,10 +92,6 @@ class MainActivity : ComponentActivity() {
         splashScreen.setKeepOnScreenCondition {
             uiState is UiState.Loading
         }
-
-        authViewModel = ViewModelProvider(this)[AuthViewModel::class.java]
-        authViewModel.initialize(this)
-        RetrofitClient.initialize(authViewModel)
 
         val appViewModels = AppViewModels(
             homeIllustViewModel = homeIllustViewModel,
@@ -136,59 +122,18 @@ class MainActivity : ComponentActivity() {
                                     navController = rootNavController
                                 )
                             }
-
-                            composable(ContentRoutes.ILLUSTRATIONS) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
-                                    IllustrationsScreen(
-                                        modifier = Modifier.padding(padding),
-                                        navController = rootNavController,
-                                        homeIllustViewModel = appViewModels.homeIllustViewModel
-                                    )
-                                }
+                            composable(route = MAIN_CONTENT_ROUTE) {
+                                MainContentScreen(
+                                    rootNavController = rootNavController,
+                                    authViewModel = authViewModel,
+                                    pixivApiService = RetrofitClient.apiService,
+                                    appViewModels = appViewModels,
+                                    onLogout = authViewModel::logout,
+                                    settingRepo = (app).appContainer.settingsRepository,
+                                    batterySaverRepo = (app).appContainer.BatterySaverTheme
+                                )
                             }
-
-                            composable(ContentRoutes.MANGA) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
-                                    MangaScreen(
-                                        modifier = Modifier.padding(padding),
-                                        navController = rootNavController,
-                                        mangaViewModel = appViewModels.mangaViewModel
-                                    )
-                                }
-                            }
-
-                            composable(ContentRoutes.NOVEL) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
-                                    NovelHomeScreen(
-                                        modifier = Modifier.padding(padding),
-                                        navController = rootNavController,
-                                        homeINovelViewModel = appViewModels.homeINovelViewModel
-                                    )
-                                }
-                            }
-
-                            composable(ContentRoutes.NEWEST) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
-                                    NewestScreen(
-                                        //modifier = Modifier.padding(padding),
-                                        navController = rootNavController
-                                    )
-                                }
-                            }
-
-                            composable(ContentRoutes.RANKING) {
-                                MainAppShell(authViewModel = authViewModel, rootNavController = rootNavController, pixivApiService = RetrofitClient.apiService) { padding ->
-                                    RankingScreen(
-                                        //modifier = Modifier.padding(padding),
-                                        navController = rootNavController
-                                    )
-                                }
-                            }
-
-
                             // Other screens not realted to navigation
-
-
                             composable<FullImageScreenRoute> { backStackEntry ->
                                 // Automatically deserialize the arguments into our data class
                                 val routeArgs = backStackEntry.toRoute<FullImageScreenRoute>()
@@ -198,6 +143,7 @@ class MainActivity : ComponentActivity() {
                                     navController = rootNavController,
                                     homeIllustViewModel = homeIllustViewModel,
                                     mangaViewModel = mangaViewModel,
+                                    isBatterySaverTheme = (app).appContainer.BatterySaverTheme
                                 )
                             }
 
@@ -273,13 +219,6 @@ class MainActivity : ComponentActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         Log.d(TAG, "onConfigurationChanged called: orientation = ${newConfig.orientation}")
-    }
-
-    private fun hasSavedToken(context: Context): Boolean {
-        val sharedPreferences = context.getSharedPreferences("pixiv_prefs", Context.MODE_PRIVATE)
-        val accessToken = sharedPreferences.getString("access_token", null)
-        val expirationTime = sharedPreferences.getLong("token_expiration", 0)
-        return !accessToken.isNullOrEmpty() && System.currentTimeMillis() < expirationTime
     }
 }
 

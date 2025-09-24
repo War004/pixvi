@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import com.example.pixvi.MainActivity.Companion.MAIN_CONTENT_ROUTE
 import com.example.pixvi.R
 import com.example.pixvi.login.AuthViewModel
 import com.example.pixvi.login.LoginState
@@ -44,7 +45,7 @@ fun LoginScreen(
     val loginState by authViewModel.loginState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    // This effect for launching the browser is perfect as is.
+    // This effect for launching the browser
     LaunchedEffect(Unit) {
         authViewModel.launchLoginUrlEvent.collect { loginUri ->
             val customTabsIntent = CustomTabsIntent.Builder().build()
@@ -62,14 +63,10 @@ fun LoginScreen(
         }
     }
 
-    // ADDED: A single, top-level LaunchedEffect to handle navigation.
-    // This is cleaner than nesting it inside the `when` block.
     LaunchedEffect(loginState) {
         if (loginState is LoginState.Success) {
-            // MODIFIED: Navigate to the actual default content screen.
-            navController.navigate(ContentRoutes.ILLUSTRATIONS) {
-                // This is the most robust way to clear the back stack.
-                // It removes the LoginScreen so the user can't go back to it.
+            navController.navigate(MAIN_CONTENT_ROUTE) {
+                //removing the login screen from the backstack based on the LoginState
                 popUpTo(navController.graph.findStartDestination().id) {
                     inclusive = true
                 }

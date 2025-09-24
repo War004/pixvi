@@ -71,7 +71,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.pixvi.network.response.Home.Illust.Illust
+import com.example.pixvi.network.response.Home.Illust
 import kotlinx.coroutines.launch
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -115,33 +115,21 @@ private data class FloatingToolbarInfo(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun FloatingImageInfoToolbar(
-    illust: Any,
+    illust: Illust,
     modifier: Modifier = Modifier,
     onFavoriteClicked: () -> Unit,
     onLongFavorite: () -> Unit
 ) {
 
     val info = remember(illust) {
-        when (illust) {
-            is Illust -> FloatingToolbarInfo(
-                title = illust.title,
-                userName = illust.user.name,
-                create_date = illust.create_date,
-                total_view = illust.total_view,
-                total_bookmarks = illust.total_bookmarks,
-                is_bookmarked = illust.is_bookmarked
-            )
-
-            is com.example.pixvi.network.response.Home.Manga.Illust-> FloatingToolbarInfo(
-                title = illust.title,
-                userName = illust.user.name,
-                create_date = illust.create_date,
-                total_view = illust.total_view,
-                total_bookmarks = illust.total_bookmarks,
-                is_bookmarked = illust.is_bookmarked
-            )
-            else -> throw IllegalArgumentException("Unsupported type for FloatingImageInfoToolbar: ${illust::class.java.name}")
-        }
+        FloatingToolbarInfo(
+            title = illust.title,
+            userName = illust.user.name,
+            create_date = illust.create_date,
+            total_view = illust.total_view,
+            total_bookmarks = illust.total_bookmarks,
+            is_bookmarked = illust.is_bookmarked
+        )
     }
 
     var showInfo by remember { mutableStateOf(false) }

@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -26,33 +28,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import coil.Coil
+import coil3.SingletonImageLoader
+import com.example.pixvi.repo.BatterySaverThemeRepository
+import com.example.pixvi.repo.SystemInfoRepository
+import com.example.pixvi.settings.SettingsRepository
 import com.example.pixvi.utils.NetworkPerformanceMonitor
 import com.example.pixvi.utils.NormalImageRequest
 import com.example.pixvi.utils.PixivAsyncImage
 import com.example.pixvi.utils.isPowerSaveModeActive
-import com.example.pixvi.viewModels.HomeIllustViewModel
-import com.example.pixvi.viewModels.MangaViewModel
-import com.example.pixvi.viewModels.ContentType
-import com.example.pixvi.viewModels.DetailScreenState
-import com.example.pixvi.viewModels.DetailViewModel
-import com.example.pixvi.viewModels.DisplayableItem
-import com.example.pixvi.viewModels.formatDateStringSafe
-import com.example.pixvi.viewModels.toDisplayableItem
+import com.example.pixvi.viewModels.*
 import kotlin.math.absoluteValue
-import com.example.pixvi.viewModels.ImageQuality
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-
+import kotlinx.coroutines.withContext
+import java.util.UUID
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -60,17 +67,21 @@ fun FullImageScreen(
     contentType: ContentType,
     navController: NavController,
     homeIllustViewModel: HomeIllustViewModel,
-    mangaViewModel: MangaViewModel
+    mangaViewModel: MangaViewModel,
+    isBatterySaverTheme: BatterySaverThemeRepository
 ) {
-
     val initialState by remember(contentType) {
         derivedStateOf {
             when (contentType) {
                 ContentType.ILLUST -> {
                     val state = homeIllustViewModel.uiState.value
                     val isFromRanking = state.indices.rankingCurrentIndex != null
-                    val list = if (isFromRanking) state.rankingIllusts.map { it.toDisplayableItem() } else state.recommendations.map { it.toDisplayableItem() }
-                    val index = if (isFromRanking) state.indices.rankingCurrentIndex else state.indices.recommendationsCurrentIndex
+                    val list =
+                        if (isFromRanking) state.rankingIllusts.map { it.toDisplayableItem() }
+                        else state.recommendations.map { it.toDisplayableItem() }
+                    val index =
+                        if (isFromRanking) state.indices.rankingCurrentIndex
+                        else state.indices.recommendationsCurrentIndex
                     DetailScreenState(
                         items = list,
                         initialIndex = index ?: 0,
@@ -82,8 +93,12 @@ fun FullImageScreen(
                 ContentType.MANGA -> {
                     val state = mangaViewModel.uiState.value
                     val isFromRanking = state.indices.rankingCurrentIndex != null
-                    val list = if (isFromRanking) state.rankingIllusts.map { it.toDisplayableItem() } else state.recommendations.map { it.toDisplayableItem() }
-                    val index = if (isFromRanking) state.indices.rankingCurrentIndex else state.indices.recommendationsCurrentIndex
+                    val list =
+                        if (isFromRanking) state.rankingIllusts.map { it.toDisplayableItem() }
+                        else state.recommendations.map { it.toDisplayableItem() }
+                    val index =
+                        if (isFromRanking) state.indices.rankingCurrentIndex
+                        else state.indices.recommendationsCurrentIndex
                     DetailScreenState(
                         items = list,
                         initialIndex = index ?: 0,
@@ -98,21 +113,47 @@ fun FullImageScreen(
 
     val detailViewModel: DetailViewModel = viewModel(
         factory = DetailViewModel.provideFactory(
-            homeIllustViewModel = homeIllustViewModel,
-            mangaViewModel = mangaViewModel,
-            contentType = contentType,
-            initialState = initialState
+            homeIllustViewModel,
+            mangaViewModel,
+            contentType,
+            initialState,
+            isBatterySaverTheme
         )
     )
 
     val uiState by detailViewModel.uiState.collectAsState()
+    val imageQuality by detailViewModel.imageQuality.collectAsState()
 
-    val isBatterySaverOn = isPowerSaveModeActive()
-    var imageQuality by remember { mutableStateOf(ImageQuality.AUTO) }
+    val isPowerSaverTheme by detailViewModel.isPowerSaverTheme.collectAsState()
+
     val context = LocalContext.current
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var snackbarJob by remember { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(true) {
+        detailViewModel.uiEvent.collect { event ->
+            // We only care about failure events for our global message
+            if (event is BookmarkEffect.Failure) {
+                // This is the CRITICAL part for preventing spam:
+                // Cancel the previous snackbar job before starting a new one.
+                snackbarJob?.cancel()
+
+                // Launch a new coroutine to show the snackbar.
+                snackbarJob = scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Error: ${event.errorMessage}",
+                        withDismissAction = true // Adds a dismiss button
+                    )
+                }
+            }
+        }
+    }
+
+
     if (uiState.items.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
         return
@@ -123,32 +164,27 @@ fun FullImageScreen(
         pageCount = { uiState.items.size }
     )
 
-
     var currentSubPageIndex by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(pagerState.currentPage) {
-        // Reset sub-page index when horizontal page changes
-        currentSubPageIndex = if (pagerState.currentPage == uiState.initialIndex) {
-            uiState.initialSubPageIndex
-        } else {
-            0
-        }
+        currentSubPageIndex = if (pagerState.currentPage == uiState.initialIndex)
+            uiState.initialSubPageIndex else 0
     }
-
 
     LaunchedEffect(pagerState.currentPage, uiState.isLoadingMore, uiState.nextUrl) {
         val buffer = 5
         val triggerIndex = (uiState.items.size - 1 - buffer).coerceAtLeast(0)
-        if (pagerState.currentPage >= triggerIndex && !uiState.isLoadingMore && uiState.nextUrl != null) {
+        if (pagerState.currentPage >= triggerIndex &&
+            !uiState.isLoadingMore &&
+            uiState.nextUrl != null
+        ) {
             detailViewModel.loadMore()
         }
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            // Get the last page the user was on
             val lastViewedIndex = pagerState.currentPage
-            // Update the appropriate ViewModel based on the content type
             when (contentType) {
                 ContentType.ILLUST -> homeIllustViewModel.updateLastViewedIndex(lastViewedIndex)
                 ContentType.MANGA -> mangaViewModel.updateLastViewedIndex(lastViewedIndex)
@@ -157,7 +193,7 @@ fun FullImageScreen(
     }
 
     if (pagerState.currentPage >= uiState.items.size) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Loading content...")
         }
         return
@@ -166,20 +202,17 @@ fun FullImageScreen(
     val currentItem = uiState.items[pagerState.currentPage]
     val loadedImageUrls = remember { mutableStateMapOf<Int, String?>() }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-
-        if (isBatterySaverOn) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.surface
-            ) {}
+    Box(Modifier.fillMaxSize()) {
+        if (isPowerSaverTheme) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {}
         } else {
-            // Battery Saver is OFF: Draw the expensive blurred background.
             FadingBackgroundImage(
                 pagerState = pagerState,
                 loadedImageUrls = loadedImageUrls,
                 items = uiState.items,
-                modifier = Modifier.fillMaxSize().blur(radius = 80.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(80.dp)
             )
         }
 
@@ -191,10 +224,11 @@ fun FullImageScreen(
             initialHorizontalIndex = uiState.initialIndex,
             initialSubPageIndex = uiState.initialSubPageIndex,
             imageQuality = imageQuality,
-            isBorderEnabled = isBatterySaverOn,
-            onSubPageChange = { newSubPageIndex ->
-                currentSubPageIndex = newSubPageIndex
-            }
+            uiEventFlow = detailViewModel.uiEvent,
+            onBookmark = { illustId, token ->
+                detailViewModel.toggleBookmark(illustId, token)
+            },
+            onSubPageChange = { currentSubPageIndex = it }
         )
 
         TopAppBar(
@@ -207,32 +241,21 @@ fun FullImageScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             title = {
                 Column {
-                    Text(currentItem.userName, color = Color.White, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = formatDateStringSafe(currentItem.createDate),
+                        currentItem.userName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        formatDateStringSafe(currentItem.createDate),
                         color = Color.White.copy(alpha = 0.85f),
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
+                        maxLines = 1
                     )
                 }
             },
             actions = {
-                IconButton(onClick = {
-                    imageQuality = when (imageQuality) {
-                        ImageQuality.AUTO -> {
-                            //Toast.makeText(context, "Forcing large quality", Toast.LENGTH_SHORT).show()
-                            ImageQuality.LARGE
-                        }
-                        ImageQuality.LARGE -> {
-                            //Toast.makeText(context, "Forcing medium quality", Toast.LENGTH_SHORT).show()
-                            ImageQuality.MEDIUM
-                        }
-                        ImageQuality.MEDIUM -> {
-                            //Toast.makeText(context, "Auto quality enabled", Toast.LENGTH_SHORT).show()
-                            ImageQuality.AUTO
-                        }
-                    }
-                }) {
+                IconButton(onClick = { detailViewModel.cycleImageQuality() }) {
                     Icon(
                         imageVector = when (imageQuality) {
                             ImageQuality.AUTO -> Icons.Default.AutoAwesome
@@ -243,16 +266,9 @@ fun FullImageScreen(
                         tint = Color.White
                     )
                 }
-                /*
-                IconButton(onClick = { detailViewModel.toggleBookmark(currentItem.id) }) {
-                    Icon(
-                        imageVector =if (currentItem.isBookmarked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Bookmark",
-                        tint = if (currentItem.isBookmarked) Color(0xFFE8457E) else Color.White
-                    )
-                }*/
                 IconButton(onClick = {
-                    val pageToSave = if (currentItem.pageCount > 1) currentSubPageIndex else 0
+                    val pageToSave =
+                        if (currentItem.pageCount > 1) currentSubPageIndex else 0
                     detailViewModel.saveOrginalImageToDevice(
                         context = context,
                         originalImageUrl = currentItem.originalImageUrls[pageToSave],
@@ -267,13 +283,31 @@ fun FullImageScreen(
                         tint = Color.White
                     )
                 }
-                IconButton(onClick = {}) { Icon(Icons.Outlined.MoreVert, "More Options", tint = Color.White) }
+                IconButton(onClick = {}) {
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        "More Options",
+                        tint = Color.White
+                    )
+                }
             }
         )
 
         if (uiState.isLoadingMore) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+            )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(16.dp)
+        )
     }
 }
 
@@ -287,9 +321,12 @@ private fun ImageCarousel(
     initialHorizontalIndex: Int,
     initialSubPageIndex: Int,
     imageQuality: ImageQuality,
-    isBorderEnabled: Boolean,
+    uiEventFlow: SharedFlow<BookmarkEffect>,
+    onBookmark: (illustId: Long, token: String) -> Unit,
     onSubPageChange: (Int) -> Unit
 ) {
+    val haptics = LocalHapticFeedback.current
+
     HorizontalPager(
         modifier = modifier,
         state = pagerState,
@@ -297,17 +334,24 @@ private fun ImageCarousel(
         pageSpacing = 20.dp
     ) { page ->
         val item = items[page]
+
         if (item.pageCount <= 1) {
-            CarouselItem(
+            ArtworkCard(
                 item = item,
-                onImageLoaded = { url -> onImageLoadedForPage(page, url) },
-                imageQuality = imageQuality,
                 pageIndex = 0,
-                isBorderEnabled = isBorderEnabled
+                imageQuality = imageQuality,
+                uiEventFlow = uiEventFlow,
+                onBookmark = { token -> onBookmark(item.id, token) },
+                onImageLoaded = { url -> onImageLoadedForPage(page, url) },
+                modifier = Modifier.fillMaxWidth()
             )
         } else {
-            val subPageInitial = if (page == initialHorizontalIndex) initialSubPageIndex else 0
-            val verticalPageState = rememberPagerState(initialPage = subPageInitial, pageCount = { item.pageCount })
+            val subInitial =
+                if (page == initialHorizontalIndex) initialSubPageIndex else 0
+            val verticalPageState = rememberPagerState(
+                initialPage = subInitial,
+                pageCount = { item.pageCount }
+            )
 
             LaunchedEffect(verticalPageState.currentPage) {
                 onSubPageChange(verticalPageState.currentPage)
@@ -318,67 +362,86 @@ private fun ImageCarousel(
                 contentPadding = PaddingValues(vertical = 150.dp),
                 pageSpacing = 16.dp
             ) { innerPage ->
-                val pageOffset = (verticalPageState.currentPage - innerPage) + verticalPageState.currentPageOffsetFraction
+                val pageOffset =
+                    (verticalPageState.currentPage - innerPage) + verticalPageState.currentPageOffsetFraction
                 val scale = lerp(0.9f, 1f, 1f - pageOffset.absoluteValue.coerceIn(0f, 1f))
-                val aspectRatio = if (item.height > 0) item.width.toFloat() / item.height.toFloat() else 0.71f
+                val aspectRatio =
+                    if (item.height > 0) item.width.toFloat() / item.height.toFloat() else 0.71f
 
-                val cardModifier = Modifier
-                    .graphicsLayer { scaleX = scale; scaleY = scale }
-                    .fillMaxHeight()
-                    .aspectRatio(aspectRatio)
-
-                Card(
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = if (isBorderEnabled) {
-                        cardModifier.border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                    } else {
-                        cardModifier
-                    }
-                ) {
-                    SmartPixivImage(
-                        item = item,
-                        pageIndex = innerPage,
-                        contentDescription = "Image ${innerPage + 1} for ${item.title}",
-                        modifier = Modifier.fillMaxSize(),
-                        imageQuality = imageQuality,
-                        onImageLoaded = { url ->
-                            if (innerPage == 0) {
-                                onImageLoadedForPage(page, url)
-                            }
-                        },
-                    )
-                }
+                ArtworkCard(
+                    item = item,
+                    pageIndex = innerPage,
+                    imageQuality = imageQuality,
+                    uiEventFlow = uiEventFlow,
+                    onBookmark = { token -> onBookmark(item.id, token) },
+                    onImageLoaded = { url ->
+                        if (innerPage == 0) {
+                            onImageLoadedForPage(page, url)
+                        }
+                    },
+                    modifier = Modifier
+                        .graphicsLayer { scaleX = scale; scaleY = scale }
+                        .fillMaxHeight()
+                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CarouselItem(
+private fun ArtworkCard(
     item: DisplayableItem,
-    onImageLoaded: (String) -> Unit,
-    imageQuality: ImageQuality,
     pageIndex: Int,
-    isBorderEnabled: Boolean
+    imageQuality: ImageQuality,
+    onBookmark: (token: String) -> Unit,
+    uiEventFlow: SharedFlow<BookmarkEffect>,
+    onImageLoaded: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val haptics = LocalHapticFeedback.current
     val aspectRatio = if (item.height > 0) item.width.toFloat() / item.height.toFloat() else 0.71f
-    val cardModifier = Modifier.fillMaxWidth().aspectRatio(aspectRatio)
+
+    var lastRequestToken by remember { mutableStateOf<String?>(null) }
+    var animationInfo by remember { mutableStateOf<AnimationInfo?>(null) }
+
+    LaunchedEffect(uiEventFlow, lastRequestToken) {
+        if (lastRequestToken == null) return@LaunchedEffect
+        uiEventFlow.collect { event ->
+            if (event.token == lastRequestToken) {
+                animationInfo = when (event) {
+                    is BookmarkEffect.Processing -> AnimationInfo.Processing
+                    is BookmarkEffect.Success -> AnimationInfo.Success(event.newBookmarkState)
+                    is BookmarkEffect.Failure -> AnimationInfo.Failure
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(animationInfo) {
+        if (animationInfo is AnimationInfo.Success || animationInfo is AnimationInfo.Failure) {
+            delay(1500L)
+            animationInfo = null
+        }
+    }
 
     Card(
         shape = RoundedCornerShape(10.dp),
-        modifier = if (isBorderEnabled) {
-            cardModifier.border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), // Use a subtle outline color
-                shape = RoundedCornerShape(10.dp)
+        modifier = modifier
+            .aspectRatio(aspectRatio)
+            .semantics {
+                contentDescription = "Artwork ${item.title}. Double tap to bookmark."
+                role = Role.Image
+            }
+            .combinedClickable(
+                onClick = { },
+                onDoubleClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val token = UUID.randomUUID().toString()
+                    lastRequestToken = token
+                    onBookmark(token)
+                }
             )
-        } else {
-            cardModifier
-        }
     ) {
         SmartPixivImage(
             item = item,
@@ -387,9 +450,11 @@ private fun CarouselItem(
             modifier = Modifier.fillMaxSize(),
             imageQuality = imageQuality,
             onImageLoaded = onImageLoaded,
+            animationInfo  = animationInfo
         )
     }
 }
+
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
@@ -433,26 +498,15 @@ private fun FadingBackgroundImage(
                     width = targetWidth,
                     height = targetHeight,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().graphicsLayer { alpha = pageOffset.absoluteValue }
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = pageOffset.absoluteValue }
                 )
             }
         }
     }
 }
 
-/**
- *
- * This composable is the intelligent core for displaying images. It is responsible for:
- * 1.  Correctly scoping its internal state to each unique image to prevent bugs when swiping.
- * 2.  Implementing the user's manual quality choice (LARGE or MEDIUM).
- * 3.  Implementing a hybrid "AUTO" mode that:
- *     - Uses the global NetworkPerformanceMonitor for a smart default quality.
- *     - Applies an immediate timeout to any 'large' image attempt to ensure UI responsiveness.
- *     - Falls back to 'medium' quality if the timeout is exceeded.
- *     - Reports all performance metrics back to the monitor.
- * 4.  Preventing wasteful network reloads when a user toggles to a lower quality
- *     for an image that is already displayed in high quality.
- */
 @Composable
 fun SmartPixivImage(
     item: DisplayableItem,
@@ -460,56 +514,57 @@ fun SmartPixivImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     imageQuality: ImageQuality,
-    onImageLoaded: (String) -> Unit
+    onImageLoaded: (String) -> Unit,
+    animationInfo: AnimationInfo?
 ) {
     val largeUrl = item.largeImageUrls.getOrElse(pageIndex) { "" }
     val mediumUrl = item.mediumImageUrls.getOrElse(pageIndex) { "" }
-
     val context = LocalContext.current
 
     var imageUrlToDisplay by remember(largeUrl, mediumUrl) { mutableStateOf<String?>(null) }
     var displayedQuality by remember(largeUrl, mediumUrl) { mutableStateOf<ImageQuality?>(null) }
-
     val autoQuality by NetworkPerformanceMonitor.currentAutoQuality.collectAsState()
 
-
     LaunchedEffect(imageUrlToDisplay) {
-        imageUrlToDisplay?.let { onImageLoaded(it) }
+        imageUrlToDisplay?.let(onImageLoaded)
     }
 
     LaunchedEffect(largeUrl, mediumUrl, imageQuality, autoQuality) {
-        val imageLoader = Coil.imageLoader(context)
+        val imageLoader = SingletonImageLoader.get(context)
 
-        val finalTargetQuality = if (imageQuality == ImageQuality.AUTO) autoQuality else imageQuality
+        suspend fun canLoad(url: String): Boolean {
+            if (url.isEmpty()) return false
+            return withContext(Dispatchers.IO) {
+                val request = NormalImageRequest.normalImageRequest(context, url)
+                imageLoader.execute(request).image != null
+            }
+        }
 
-        if (displayedQuality == ImageQuality.LARGE && finalTargetQuality == ImageQuality.MEDIUM) {
-            return@LaunchedEffect
-        }
-        if (finalTargetQuality == displayedQuality && imageUrlToDisplay != null) {
-            return@LaunchedEffect
-        }
+        val finalTargetQuality =
+            if (imageQuality == ImageQuality.AUTO) autoQuality else imageQuality
+
+        if (displayedQuality == ImageQuality.LARGE && finalTargetQuality == ImageQuality.MEDIUM) return@LaunchedEffect
+        if (finalTargetQuality == displayedQuality && imageUrlToDisplay != null) return@LaunchedEffect
 
         imageUrlToDisplay = null
 
         when (imageQuality) {
             ImageQuality.LARGE, ImageQuality.MEDIUM -> {
                 val url = if (imageQuality == ImageQuality.LARGE) largeUrl else mediumUrl
-                val request = NormalImageRequest.normalImageRequest(context, url)
-                if (imageLoader.execute(request).drawable != null) {
+                if (canLoad(url)) {
                     imageUrlToDisplay = url
                     displayedQuality = imageQuality
                 }
             }
             ImageQuality.AUTO -> {
-                val isWifi = (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
-                    .getNetworkCapabilities((context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).activeNetwork)
+                val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                val isWifi = cm.getNetworkCapabilities(cm.activeNetwork)
                     ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ?: true
                 val timeoutMs = if (isWifi) 350L else 600L
 
                 coroutineScope {
                     if (autoQuality == ImageQuality.MEDIUM) {
-                        val request = NormalImageRequest.normalImageRequest(context, mediumUrl)
-                        if (imageLoader.execute(request).drawable != null) {
+                        if (canLoad(mediumUrl)) {
                             imageUrlToDisplay = mediumUrl
                             displayedQuality = ImageQuality.MEDIUM
                         }
@@ -518,16 +573,16 @@ fun SmartPixivImage(
 
                     val startTime = System.currentTimeMillis()
                     val targetJob = launch {
-                        val request = NormalImageRequest.normalImageRequest(context, largeUrl)
-                        if (imageLoader.execute(request).drawable != null) {
+                        if (canLoad(largeUrl)) {
                             if (coroutineContext.isActive) {
                                 imageUrlToDisplay = largeUrl
                                 displayedQuality = ImageQuality.LARGE
-                                val duration = System.currentTimeMillis() - startTime
-                                NetworkPerformanceMonitor.recordLoadTime(duration)
+                                NetworkPerformanceMonitor.recordLoadTime(
+                                    System.currentTimeMillis() - startTime
+                                )
                             }
-                        } else {
-                            if (coroutineContext.isActive) {
+                        } else if (coroutineContext.isActive) {
+                            if (canLoad(mediumUrl)) {
                                 imageUrlToDisplay = mediumUrl
                                 displayedQuality = ImageQuality.MEDIUM
                                 NetworkPerformanceMonitor.recordLoadTime(timeoutMs)
@@ -540,18 +595,39 @@ fun SmartPixivImage(
                     if (targetJob.isActive) {
                         targetJob.cancelAndJoin()
                         NetworkPerformanceMonitor.recordLoadTime(timeoutMs)
-                        imageUrlToDisplay = mediumUrl
-                        displayedQuality = ImageQuality.MEDIUM
+                        if (canLoad(mediumUrl)) {
+                            imageUrlToDisplay = mediumUrl
+                            displayedQuality = ImageQuality.MEDIUM
+                        }
                     }
                 }
             }
         }
     }
 
+    val borderModifier = when (animationInfo) {
+        is AnimationInfo.Processing -> Modifier.border(4.dp, Color.Yellow, RoundedCornerShape(10.dp))
+        is AnimationInfo.Success -> {
+            val borderColor = when (animationInfo.isBookmarked) {
+                true -> Color.Magenta
+                false -> Color.Gray
+            }
+            Modifier.border(4.dp, borderColor, RoundedCornerShape(10.dp))
+        }
+        is AnimationInfo.Failure -> Modifier.border(4.dp, Color.Red, RoundedCornerShape(10.dp))
+        null -> Modifier
+    }
+
     PixivAsyncImage(
         imageUrl = imageUrlToDisplay,
         contentDescription = contentDescription,
-        modifier = modifier,
-        contentScale = ContentScale.Crop,
+        modifier = modifier.then(borderModifier),
+        contentScale = ContentScale.Crop
     )
+}
+
+sealed interface AnimationInfo {
+    data class Success(val isBookmarked: Boolean) : AnimationInfo
+    object Processing : AnimationInfo
+    object Failure : AnimationInfo
 }

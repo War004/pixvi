@@ -5,6 +5,7 @@ import android.app.Application
 import android.util.Log
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.fromHtml
+import androidx.core.text.HtmlCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 
 class HomeNovelViewModel(
@@ -48,8 +50,6 @@ class HomeNovelViewModel(
 
     private fun Novel.toNovelForDisplay(): NovelForDisplay {
 
-        val parsedAnnotatedString = AnnotatedString.Companion.fromHtml(this.caption)
-
         return NovelForDisplay(
             id = this.id,
             title = this.title,
@@ -63,7 +63,6 @@ class HomeNovelViewModel(
             total_comments = this.total_comments,
             is_bookmarked = this.is_bookmarked,
             tags = this.tags,
-            parsedCaption = parsedAnnotatedString // The result of the parsing is stored here
         )
     }
 
@@ -90,7 +89,10 @@ class HomeNovelViewModel(
                     val body = response.body()
                     if (body != null) {
                         val novelsFromNetwork = body.novels ?: emptyList()
-                        val novelsForDisplay = novelsFromNetwork.map { it.toNovelForDisplay() }
+
+                        val novelsForDisplay = withContext(Dispatchers.Default) {
+                            novelsFromNetwork.map { it.toNovelForDisplay() }
+                        }
 
                         _uiState.update {
 
@@ -136,7 +138,11 @@ class HomeNovelViewModel(
                     if (body?.novels != null) {
                         // Append new items and update next URL
                         val newNovelsFromNetwork = body.novels
-                        val newNovelsForDisplay = newNovelsFromNetwork.map { it.toNovelForDisplay() }
+
+                        val newNovelsForDisplay = withContext(Dispatchers.Default) {
+                            newNovelsFromNetwork.map { it.toNovelForDisplay() }
+                        }
+
                         _uiState.update { currentState ->
                             currentState.copy(
                                 recommendations = currentState.recommendations + newNovelsForDisplay,

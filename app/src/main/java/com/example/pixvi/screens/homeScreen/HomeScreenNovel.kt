@@ -1,7 +1,6 @@
 package com.example.pixvi.screens.homeScreen
 
 import android.content.ClipData
-import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,6 +44,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Comment
@@ -58,10 +58,6 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.core.text.HtmlCompat
-import coil.compose.rememberAsyncImagePainter
-import coil.request.CachePolicy
-import coil.request.ImageRequest
 import com.example.pixvi.network.BookmarkRestrict
 import com.example.pixvi.network.response.Home.Novels.Novel
 import com.example.pixvi.network.response.Home.Novels.NovelForDisplay
@@ -70,10 +66,21 @@ import com.example.pixvi.viewModels.HomeNovelViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
-import okhttp3.Headers
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.fromHtml
+import androidx.compose.ui.text.withStyle
+import androidx.core.text.HtmlCompat
+import coil3.compose.rememberAsyncImagePainter
 import com.example.pixvi.NovelDetailScreen
+import com.example.pixvi.utils.PixivAsyncImage
+import coil3.request.transformations
+import coil3.size.Precision
+import com.commit451.coiltransformations.BlurTransformation
+import com.example.pixvi.utils.NormalImageRequest
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -266,13 +273,40 @@ fun CardNovel(novel: NovelForDisplay, onClick: () -> Unit, onLongClick: () -> Un
     val clipboard: androidx.compose.ui.platform.Clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val plainTextContent = remember(novel.caption) {
-        HtmlCompat.fromHtml(novel.caption, HtmlCompat.FROM_HTML_MODE_LEGACY).toString()
-    }
-
-    val imagePainter = rememberPixivImagePainter(novel.image_urls.medium)
 
     val scrollState1 = rememberScrollState()
+
+    val coverImageRequest = remember(novel.image_urls.medium) {
+        NormalImageRequest.normalImageRequest(
+            context = context,
+            imageUrl = novel.image_urls.medium
+        )
+    }
+    val coverPainter = rememberAsyncImagePainter(model = coverImageRequest)
+
+    // --- REQUEST 2: The Optimized Background Image ---
+    // Use your helper again, but this time, provide the configuration block.
+    val backgroundImageRequest = remember(novel.image_urls.medium) {
+        NormalImageRequest.normalImageRequest(
+            context = context,
+            imageUrl = novel.image_urls.medium
+        ) { builder ->
+            // Inside this block, we add our specific optimizations.
+            // The builder already has your common headers, crossfade, etc.
+            builder
+                .size(width = 200, height = 300)
+                .precision(Precision.INEXACT)
+                .transformations(
+                    BlurTransformation(
+                        context = context,
+                        radius = 25f,
+                        sampling = 2f
+                    )
+                )
+        } // The block ends here
+    }
+    val backgroundPainter = rememberAsyncImagePainter(model = backgroundImageRequest)
+
 
     Card(
         modifier = Modifier
@@ -292,229 +326,286 @@ fun CardNovel(novel: NovelForDisplay, onClick: () -> Unit, onLongClick: () -> Un
     ) {
         Row(
             modifier = Modifier.fillMaxSize()
-        ) {
-            // Box 1: Having the cover page
-            Box(
+        ){
+            Image(
+                painter = coverPainter,
+                contentDescription = "Cover for ${novel.title}",
                 modifier = Modifier
-                    .fillMaxHeight()
                     .weight(0.25f)
-            ) {
-                Image(
-                    painter = imagePainter,
-                    contentDescription = "Cover for ${novel.title}",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-            // Container for the switchable content with a background
+                    .fillMaxHeight(),
+                contentScale = ContentScale.Crop
+            )
+
+            //Right-side-box
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
                     .weight(0.75f)
+                    .fillMaxHeight()
             ) {
-
                 Image(
-                    painter = imagePainter,
+                    painter = backgroundPainter,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                    colorFilter = ColorFilter.tint(Color.Black.copy(alpha = 0.6f), blendMode = BlendMode.SrcOver) //replacing the box
+                    colorFilter = ColorFilter.tint(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        blendMode = BlendMode.SrcOver
+                    )
                 )
 
-
-                if (!showDetails) {
-                    // STATE 1: Default view with main info
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.SpaceBetween // This pushes content to top and bottom
-                    ) {
-                        // Top section: Title, Author, and Stats are grouped together
-                        Column {
-                            Text(
-                                text = novel.title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .combinedClickable(
-                                    onClick = {/*Nothing*/},
-                                    onLongClick = {
-                                        scope.launch{
-                                            val clipData: ClipData =
-                                                ClipData.newPlainText("Novel_title", novel.title)
-                                            clipboard.setClipEntry(ClipEntry(clipData))
-                                            Toast.makeText(
-                                                context,
-                                                "Novel title copied to clipboard",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
+                //Layer 2- for text info
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (!showDetails) {
+                        // STATE 1: Default view with main info
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                        ) {
+                            // Top section: Title, Author, and Stats are grouped together
+                            Column {
+                                Text(
+                                    text = novel.title,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = Color.White,
+                                    modifier = Modifier
+                                        .combinedClickable(
+                                            onClick = {/*Nothing*/},
+                                            onLongClick = {
+                                                scope.launch{
+                                                    val clipData: ClipData =
+                                                        ClipData.newPlainText("Novel_title", novel.title)
+                                                    clipboard.setClipEntry(ClipEntry(clipData))
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Novel title copied to clipboard",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        )
                                 )
-                                    .horizontalScroll(scrollState1)
-                            )
-                            Text(
-                                text = "by ${novel.user.name}",
-                                fontSize = 14.sp,
-                                color = Color.White.copy(alpha = 0.8f),
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Clip,
-                                modifier = Modifier.combinedClickable(
-                                    onClick = {/*Open the author page*/},
-                                    onLongClick = {
-                                        scope.launch{
-                                            val clipData: ClipData =
-                                                ClipData.newPlainText("Novel_author", novel.user.name)
-                                            clipboard.setClipEntry(ClipEntry(clipData))
-                                            Toast.makeText(
-                                                context,
-                                                "Novel author copied to clipboard",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                Text(
+                                    text = "by ${novel.user.name}",
+                                    fontSize = 14.sp,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Clip,
+                                    modifier = Modifier.combinedClickable(
+                                        onClick = {/*Open the author page*/},
+                                        onLongClick = {
+                                            scope.launch{
+                                                val clipData: ClipData =
+                                                    ClipData.newPlainText("Novel_author", novel.user.name)
+                                                clipboard.setClipEntry(ClipEntry(clipData))
+                                                Toast.makeText(
+                                                    context,
+                                                    "Novel author copied to clipboard",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                         }
-                                    }
+                                    )
                                 )
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            // Stats Row - This layout is preserved exactly as in your original code
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                // Views
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                // Stats Row - This layout is preserved exactly as in your original code
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
                                 ) {
-                                    Icon(Icons.Filled.RemoveRedEye, "Views", modifier = Modifier.size(17.dp), tint = Color.White)
-                                    Text(text = novel.total_view.toString(), color = Color.White, fontSize = 12.sp)
-                                }
-                                // Bookmarks
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Icon(Icons.Filled.Favorite, "Bookmarks", modifier = Modifier.size(17.dp), tint = Color.White)
-                                    Text(text = novel.total_bookmarks.toString(), color = Color.White, fontSize = 12.sp)
-                                }
-                                // Comments
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.Comment, "Comments", modifier = Modifier.size(17.dp), tint = Color.White)
-                                    Text(text = novel.total_comments.toString(), color = Color.White, fontSize = 12.sp)
+                                    // Views
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(Icons.Filled.RemoveRedEye, "Views", modifier = Modifier.size(17.dp), tint = Color.White)
+                                        Text(text = novel.total_view.toString(), color = Color.White, fontSize = 12.sp)
+                                    }
+                                    // Bookmarks
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Favorite, "Bookmarks", modifier = Modifier.size(17.dp), tint = Color.White)
+                                        Text(text = novel.total_bookmarks.toString(), color = Color.White, fontSize = 12.sp)
+                                    }
+                                    // Comments
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Comment, "Comments", modifier = Modifier.size(17.dp), tint = Color.White)
+                                        Text(text = novel.total_comments.toString(), color = Color.White, fontSize = 12.sp)
+                                    }
                                 }
                             }
-                        }
-                        LazyRow(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(end = 48.dp), // Padding to avoid the icon
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            items(
-                                items = novel.tags,
-                                key = { tag -> tag.name } // Provide a stable key
-                            ) { tag ->
-                                val displayName = tag.translated_name.takeIf { !it.isNullOrBlank() } ?: tag.name
-                                SuggestionChip(
-                                    onClick = { /* TODO: Handle tag click */ },
-                                    label = { Text(text = displayName, fontSize = 12.sp) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = Color.White.copy(alpha = 0.25f),
-                                        labelColor = Color.White
+
+                            Spacer(modifier = Modifier.weight(1f))
+
+                            if (novel.tags.isNotEmpty()) {
+                                // 1. Remember the scroll state for this specific text field
+                                val tagScrollState = rememberScrollState()
+
+                                val annotatedTagsString = remember(novel.tags) {
+                                    // ... (The buildAnnotatedString block is identical to the previous answer)
+                                    buildAnnotatedString {
+                                        novel.tags.forEachIndexed { index, tag ->
+                                            pushStringAnnotation(tag = "tag_click", annotation = tag.name)
+                                            withStyle(style = SpanStyle(color = Color(0xFF81D4FA))) {
+                                                append(tag.name)
+                                            }
+                                            pop()
+                                            if (index < novel.tags.size - 1) {
+                                                append("  •  ")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ClickableText(
+                                    text = annotatedTagsString,
+                                    style = TextStyle(
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        fontSize = 12.sp
                                     ),
-                                    border = null,
-                                    modifier = Modifier.height(24.dp)
+                                    // 2. Critical: Tell the Text composable NOT to wrap lines
+                                    softWrap = false,
+                                    // 3. Overflow should be Clip, not Ellipsis, for scrolling
+                                    overflow = TextOverflow.Clip,
+                                    // The maxLines is still a good safeguard
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(end = 48.dp)
+                                        // 4. Apply the horizontalScroll modifier
+                                        .horizontalScroll(tagScrollState),
+                                    onClick = { offset ->
+                                        annotatedTagsString.getStringAnnotations(tag = "tag_click", start = offset, end = offset)
+                                            .firstOrNull()?.let { annotation ->
+                                                val clickedTagName = annotation.item
+                                                Toast.makeText(context, "Clicked Tag: $clickedTagName", Toast.LENGTH_SHORT).show()
+                                            }
+                                    }
                                 )
                             }
                         }
-                    }
-                } else {
-                    // STATE 2: Flipped view with description and secondary info
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        val captionScrollState = rememberScrollState()
-                        // The caption/description
-                        Text(
-                            modifier = Modifier
-                                .weight(1f) // Takes up most of the space
-                                .verticalScroll(captionScrollState)
-                                .pointerInput(Unit){
-                                    detectVerticalDragGestures{ change, dragAmount ->
-                                        // Consume the pointer input event to stop it from propagating
-                                        change.consume()
-                                        // Manually scroll the text's state in a coroutine
-                                        scope.launch {
-                                            captionScrollState.scrollBy(-dragAmount)
-                                        }
-                                    }
-                                }
-                                .combinedClickable(
-                                    onClick = {},
-                                    onLongClick = {
-                                        scope.launch{
-                                            val clipData: ClipData =
-                                                ClipData.newHtmlText("Post_caption", plainTextContent,novel.caption)
-                                            clipboard.setClipEntry(ClipEntry(clipData))
-                                            Toast.makeText(
-                                                context,
-                                                "Caption copied to clipboard",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.9f),
-                            text = novel.parsedCaption
-                        )
-                        // Bottom row: Page/Word count
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // KEY CHANGE: Add padding to the end to avoid the icon
-                                .padding(end = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start
-                        ) {
-                            //Handle edge case for large number of pages and words
-                            Text(text = "Pages: ${novel.page_count}", style = MaterialTheme.typography.labelMedium, color = Color.White)
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(text = "Words: ${novel.text_length}", style = MaterialTheme.typography.labelMedium, color = Color.White,maxLines = 1)
+                    } else {
 
+                        val parsedCaption = remember(novel.caption) {
+                            AnnotatedString.fromHtml(novel.caption)
+                        }
+                        val plainTextCaption = remember(novel.caption) {
+                            HtmlCompat.fromHtml(novel.caption, HtmlCompat.FROM_HTML_MODE_LEGACY).toString()
+                        }
+
+                        // STATE 2: Flipped view with description and secondary info
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            val captionScrollState = rememberScrollState()
+                            // The caption/description
+                            Text(
+                                modifier = Modifier
+                                    .weight(1f) // Takes up most of the space
+                                    .verticalScroll(captionScrollState)
+                                    .pointerInput(Unit){
+                                        detectVerticalDragGestures{ change, dragAmount ->
+                                            // Consume the pointer input event to stop it from propagating
+                                            change.consume()
+                                            // Manually scroll the text's state in a coroutine
+                                            scope.launch {
+                                                captionScrollState.scrollBy(-dragAmount)
+                                            }
+                                        }
+                                    }
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = {
+                                            scope.launch{
+                                                val clipData: ClipData =
+                                                    ClipData.newHtmlText("Post_caption", plainTextCaption ,novel.caption)
+                                                clipboard.setClipEntry(ClipEntry(clipData))
+                                                Toast.makeText(
+                                                    context,
+                                                    "Caption copied to clipboard",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.9f),
+                                text = parsedCaption
+                            )
+                            // Bottom row: Page/Word count
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    // KEY CHANGE: Add padding to the end to avoid the icon
+                                    .padding(end = 48.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start
+                            ) {
+                                //Handle edge case for large number of pages and words
+                                Text(text = "Pages: ${novel.page_count}", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(text = "Words: ${novel.text_length}", style = MaterialTheme.typography.labelMedium, color = Color.White,maxLines = 1)
+
+                            }
                         }
                     }
-                }
 
-                // KEY CHANGE: The IconButton is now placed in the parent Box, aligned to the corner.
-                // It's outside the if/else block, so its position is always the same.
-                IconButton(
-                    onClick = {
-                        onNovelView()
-                        showDetails = !showDetails },
-                    modifier = Modifier.align(Alignment.BottomEnd)
-                ) {
-                    Icon(
-                        imageVector = if (showDetails) Icons.Filled.Info else Icons.Outlined.Info,
-                        contentDescription = "Toggle Details",
-                        tint = Color.White
-                    )
+                    // KEY CHANGE: The IconButton is now placed in the parent Box, aligned to the corner.
+                    // It's outside the if/else block, so its position is always the same.
+                    IconButton(
+                        onClick = {
+                            onNovelView()
+                            showDetails = !showDetails },
+                        modifier = Modifier.align(Alignment.BottomEnd)
+                    ) {
+                        Icon(
+                            imageVector = if (showDetails) Icons.Filled.Info else Icons.Outlined.Info,
+                            contentDescription = "Toggle Details",
+                            tint = Color.White
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun LiteTagChip(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    // A Box is a very cheap layout composable.
+    Box(
+        // The modifier chain is applied once here.
+        modifier = modifier
+            .height(24.dp) // Set a fixed height
+            .background(
+                color = Color.White.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(8.dp) // Use a shape for the background
+            )
+            .padding(horizontal = 8.dp), // Padding for the text
+        contentAlignment = Alignment.Center
+    ) {
+        // Just a simple Text composable inside.
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 12.sp,
+            maxLines = 1 // Ensure it doesn't wrap
+        )
     }
 }
 
@@ -534,11 +625,10 @@ fun SimpleNovelCard(novel: RankingNovel) {
                 .fillMaxSize()
         ) {
             // 1. Background Image
-            Image(
-                painter = rememberPixivImagePainter(novel.image_urls.medium),
+            PixivAsyncImage(
+                imageUrl = novel.image_urls.medium,
                 contentDescription = "Background for ${novel.title}",
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
                 colorFilter = ColorFilter.tint(Color.Black.copy(alpha = 0.5f), blendMode = BlendMode.SrcOver)
             )
 
@@ -554,11 +644,10 @@ fun SimpleNovelCard(novel: RankingNovel) {
                     text = novel.title,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
+                    overflow = TextOverflow.Ellipsis,
                     color = Color.White,
                     maxLines = 1,
                     softWrap = false,
-                    modifier = Modifier
-                        .horizontalScroll(scrollStateSimple)
                 )
                 Spacer(modifier = Modifier.height(15.dp))
                 Text(
@@ -569,42 +658,4 @@ fun SimpleNovelCard(novel: RankingNovel) {
             }
         }
     }
-}
-
-/**
- * A reusable composable that creates and remembers a Painter to load network images
- * with Pixiv-specific headers and caching.
- *
- * @param url The URL of the image to load. Can be null.
- * @return A [Painter] that can be used in an `Image` composable or a `paint` modifier.
- */
-@Composable
-fun rememberPixivImagePainter(
-    url: String?
-): Painter {
-    val context = LocalContext.current
-
-    // This logic is taken directly from PixivImageRow
-    // It's good practice to define these as constants elsewhere in your app
-    val appVersion = "6.143.0"
-    val userAgent = "PixivAndroidApp/$appVersion (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
-    val commonHeaders = remember {
-        Headers.Builder()
-            .add("Referer", "https://app-api.pixiv.net/")
-            .add("User-Agent", userAgent)
-            .build()
-    }
-
-    // We only want to rebuild the request if the URL changes
-    val imageRequest = remember(url) {
-        ImageRequest.Builder(context)
-            .data(url)
-            .headers(commonHeaders)
-            .crossfade(true) // For a smooth fade-in animation
-            .diskCachePolicy(CachePolicy.ENABLED) // Use Coil's disk cache
-            .memoryCachePolicy(CachePolicy.ENABLED) // Use Coil's memory cache
-            .build()
-    }
-
-    return rememberAsyncImagePainter(model = imageRequest)
 }

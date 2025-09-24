@@ -12,9 +12,11 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.core.graphics.drawable.toBitmap
-import coil.imageLoader
-import coil.request.ErrorResult
-import coil.request.SuccessResult
+import coil3.imageLoader
+import coil3.request.ErrorResult
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
 import com.example.pixvi.utils.NormalImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -198,7 +200,7 @@ object ImageUtils {
                     //  Toast.makeText(context, "Image loaded", Toast.LENGTH_SHORT).show() // Optional success indicator
                 }
                 // Ensure we get a mutable bitmap if needed, though toBitmap() often suffices
-                result.drawable.toBitmap()
+                result.image.toBitmap()
             }
             is ErrorResult -> {
                 withContext(Dispatchers.Main) {

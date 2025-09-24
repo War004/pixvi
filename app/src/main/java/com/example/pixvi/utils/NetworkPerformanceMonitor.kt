@@ -1,5 +1,6 @@
 package com.example.pixvi.utils
 
+import ConnectivityObserver
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -23,6 +24,7 @@ import kotlinx.coroutines.launch
  * This monitor is lifecycle-aware, context-aware, and robust against rapid
  * network state changes thanks to debouncing.
  */
+
 object NetworkPerformanceMonitor {
 
     // --- Configuration Constants ---
@@ -53,8 +55,6 @@ object NetworkPerformanceMonitor {
     private var isWifi: Boolean = true
 
     private val scope = CoroutineScope(Dispatchers.Default + Job())
-    private var debounceJob: Job? = null
-    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     private val _currentAutoQuality = MutableStateFlow(WIFI_THRESHOLDS.defaultQuality)
     val currentAutoQuality: StateFlow<ImageQuality> = _currentAutoQuality.asStateFlow()
@@ -62,40 +62,37 @@ object NetworkPerformanceMonitor {
     /**
      * PUBLIC API: MUST be called once from the Application's onCreate method.
      */
-    fun register(context: Context) {
-        if (networkCallback != null) return
+    fun register(context: Context, connectivityObserver: ConnectivityObserver) {
 
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        // Listen to the stream from ConnectivityObserver
+        scope.launch {
+            connectivityObserver.observe().collect { status ->
+                val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                val caps = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+                val newIsWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
 
-        val networkRequest = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
-        networkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                onNetworkStateChanged(connectivityManager.getNetworkCapabilities(network))
-            }
-
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                onNetworkStateChanged(networkCapabilities)
+                onNetworkStateChanged(status, newIsWifi)
             }
         }
-
-        connectivityManager.registerNetworkCallback(networkRequest, networkCallback!!)
-
-        // Set initial state without debounce
-        updateAndResetState(connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork))
     }
 
     /**
-     * Called on every network event to start or reset the debounce timer.
+     * Called whenever the observer emits a new status.
      */
-    private fun onNetworkStateChanged(capabilities: NetworkCapabilities?) {
-        debounceJob?.cancel()
-        debounceJob = scope.launch {
-            delay(NETWORK_CHANGE_DEBOUNCE_MS)
-            Log.d("NetworkMonitor", "Debounce time passed. Applying network state change.")
-            updateAndResetState(capabilities)
+    @Synchronized
+    private fun onNetworkStateChanged(status: ConnectivityObserver.Status, newIsWifi: Boolean) {
+        // Only reset if the network type has actually changed.
+        if (newIsWifi != isWifi || status is ConnectivityObserver.Status.Lost || status is ConnectivityObserver.Status.Unavailable) {
+            isWifi = newIsWifi
+            val newDefault = if (isWifi && status == ConnectivityObserver.Status.Available) {
+                WIFI_THRESHOLDS.defaultQuality
+            } else {
+                CELLULAR_THRESHOLDS.defaultQuality
+            }
+            Log.d("NetworkMonitor", "Network changed. Wifi: $isWifi. Resetting quality to $newDefault")
+            _currentAutoQuality.value = newDefault
+            performanceScore = 200.0
+            requestsSinceChange = 0
         }
     }
 

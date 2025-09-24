@@ -1,10 +1,9 @@
 package com.example.pixvi.network.api
 
-import com.example.pixvi.network.response.Home.Illust.HomeIllust
 import com.example.pixvi.network.response.AppLoading.UserStateResponse
-import com.example.pixvi.network.response.Home.Manga.HomeManga
 import com.example.pixvi.network.response.Home.Novels.HomeNovel
 import com.example.pixvi.network.response.Home.Novels.RelatedNovel
+import com.example.pixvi.network.response.Home.basePost
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Field
@@ -22,10 +21,10 @@ interface PixivApiService {
         @Query("filter") filter: String = "for_android",
         @Query("include_ranking_illusts") includeRankingIllusts: Boolean = true,
         @Query("include_privacy_policy") includePrivacyPolicy: Boolean = true
-    ): Response<HomeIllust>
+    ): Response<basePost>
 
     @GET // No path needed when using @Url //Warning
-    suspend fun getNextIllusts(@Url nextUrl: String): Response<HomeIllust>
+    suspend fun getNextIllusts(@Url nextUrl: String): Response<basePost>
 
     /**
      * Fetches the current user's state and profile information.
@@ -40,12 +39,12 @@ interface PixivApiService {
         @Query("filter") filter: String = "for_android",
         @Query("include_ranking_illusts") includeRankingIllusts: Boolean = true,
         @Query("include_privacy_policy") includePrivacyPolicy: Boolean = true
-    ): Response<HomeManga>
+    ): Response<basePost>
 
     @GET // URL will be provided dynamically by next_url
     suspend fun getNextManga(
         @Url url: String,
-    ): Response<HomeManga>
+    ): Response<basePost>
 
     /**
      * Fetches recommended novels. This function can be used to get generic recommendations

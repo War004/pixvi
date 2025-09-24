@@ -1,15 +1,21 @@
 package com.example.pixvi.screens
 
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
@@ -17,6 +23,8 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.AccountCircle
@@ -30,6 +38,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.Painter
@@ -45,8 +54,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.example.pixvi.R
 import com.example.pixvi.login.AuthViewModel
 import com.example.pixvi.login.LoginState
@@ -55,10 +62,12 @@ import com.example.pixvi.utils.ContentRoutes
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.lifecycle.viewModelScope
 import com.example.pixvi.network.api.PixivApiService
 import com.example.pixvi.utils.PixivAsyncImage
 import com.example.pixvi.viewModels.MainAppShellViewModel
+import androidx.core.net.toUri
+import com.example.pixvi.repo.BatterySaverThemeRepository
+import com.example.pixvi.settings.SettingsRepository
 
 
 private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_profile.png"
@@ -67,9 +76,13 @@ private const val NO_PROFILE_IMAGE_URL = "https://s.pximg.net/common/images/no_p
 @Composable
 fun MainAppShell(
     authViewModel: AuthViewModel,
+    contentNavController: NavController,
     rootNavController: NavController,
     pixivApiService: PixivApiService,
-    viewModel: MainAppShellViewModel = remember { MainAppShellViewModel(pixivApiService) },
+    logoutEvent: () -> Unit,
+    settingsRepository: SettingsRepository,
+    batterySaverThemeRepository: BatterySaverThemeRepository,
+    viewModel: MainAppShellViewModel = remember { MainAppShellViewModel(pixivApiService,settingsRepository,batterySaverThemeRepository) },
     content: @Composable (PaddingValues) -> Unit
 ) {
     val TAG = "MainAppShell"
@@ -82,10 +95,13 @@ fun MainAppShell(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isSearchFieldFocused by viewModel.isSearchFieldFocused.collectAsState()
 
+    val url = "https://github.com/War004/pixvi/tags"
     val context = LocalContext.current
 
     val navBackStackEntry by rootNavController.currentBackStackEntryAsState()
     val currentContentRoute = navBackStackEntry?.destination?.route
+
+    val userBatteryChoice by settingsRepository.isBatterySaver.collectAsState()
 
     //Icon based on current screen
     val iconPainter: Painter = when (currentContentRoute) {
@@ -138,94 +154,175 @@ fun MainAppShell(
                 ModalDrawerSheet {
                     Column(
                         modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .verticalScroll(rememberScrollState())
+                            .fillMaxHeight()
+                            .padding(bottom = 20.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ){
-                        Text("Quick Options", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
-                        NavigationDrawerItem(
-                            label = {Text("Bookmarks")},
-                            icon = {Icon(Icons.Default.FavoriteBorder,"Option to show bookmarks")},
-                            selected = false,
-                            onClick ={
-                                viewModel.handleDrawerItemClick {
-                                    Toast.makeText(context, "Bookmarks Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                        Column (
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .padding(end = 20.dp),
+                        ) {
+                            Text("Quick Options", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                            NavigationDrawerItem(
+                                label = {Text("Bookmarks")},
+                                icon = {Icon(Icons.Default.FavoriteBorder,"Option to show bookmarks")},
+                                selected = false,
+                                onClick ={
+                                    viewModel.handleDrawerItemClick {
+                                        Toast.makeText(context, "Bookmarks Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                        scope.launch { drawerState.close() }
+                                    }
+                                }
+                            )
+                            NavigationDrawerItem(
+                                label = {Text("History")},
+                                icon = {Icon(Icons.Default.History,"Option to show history")},
+                                selected = false,
+                                onClick ={
+                                    viewModel.handleDrawerItemClick {
+                                        Toast.makeText(context, "History Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                        scope.launch { drawerState.close() }
+                                    }
+                                }
+                            )
+                            NavigationDrawerItem(
+                                label = {Text("Filtered Work History")},
+                                icon = {Icon(Icons.Default.HistoryToggleOff,"Option to show the list of filtered through custom tags")},
+                                selected = false,
+                                onClick ={
+                                    viewModel.handleDrawerItemClick {
+                                        Toast.makeText(context, "Filtered Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                        scope.launch { drawerState.close() }
+                                    }
+                                }
+                            )
+                            NavigationDrawerItem(
+                                label = {Text("Settings")},
+                                icon = {Icon(Icons.Default.Settings,"Option to show setting menu")},
+                                selected = false,
+                                onClick ={
+                                    viewModel.handleDrawerItemClick {
+                                        Toast.makeText(context, "Setting Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                                        scope.launch { drawerState.close() }
+                                    }
+                                }
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            NavigationDrawerItem(
+                                label = { Text("Illustrations") },
+                                icon = { Icon(painterResource(R.drawable.imagesmode_24px), "Illustrations") },
+                                selected = currentContentRoute == ContentRoutes.ILLUSTRATIONS,
+                                onClick = {
                                     scope.launch { drawerState.close() }
+                                    contentNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
+                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
-                            }
-                        )
-                        NavigationDrawerItem(
-                            label = {Text("History")},
-                            icon = {Icon(Icons.Default.History,"Option to show history")},
-                            selected = false,
-                            onClick ={
-                                viewModel.handleDrawerItemClick {
-                                    Toast.makeText(context, "History Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                            )
+                            NavigationDrawerItem(
+                                label = {Text("Manga")},
+                                icon = {Icon(Icons.Filled.PhotoAlbum,"Option to show following manga")},
+                                selected = currentContentRoute == ContentRoutes.MANGA,
+                                onClick = {
                                     scope.launch { drawerState.close() }
+                                    contentNavController.navigate(ContentRoutes.MANGA) {
+                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
-                            }
-                        )
-                        NavigationDrawerItem(
-                            label = {Text("Filtered Work History")},
-                            icon = {Icon(Icons.Default.HistoryToggleOff,"Option to show the list of filtered through custom tags")},
-                            selected = false,
-                            onClick ={
-                                viewModel.handleDrawerItemClick {
-                                    Toast.makeText(context, "Filtered Clicked (TODO)", Toast.LENGTH_SHORT).show()
+                            )
+                            NavigationDrawerItem(
+                                label = {Text("Novel")},
+                                icon = {Icon(Icons.AutoMirrored.Filled.LibraryBooks,"Option to show following novel")},
+                                selected = currentContentRoute == ContentRoutes.NOVEL,
+                                onClick = {
                                     scope.launch { drawerState.close() }
+                                    contentNavController.navigate(ContentRoutes.NOVEL) {
+                                        popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .background(
+                                    shape = RoundedCornerShape(50.dp),
+                                    color = Color.Transparent//MaterialTheme.colorScheme.surface
+                                )
+                                .fillMaxWidth(0.90f),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ){
+                            IconButton(
+                                onClick = {
+                                    Log.d("MainAppShell Logout Event","Button Pressed")
+                                    logoutEvent()
+                                },
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                modifier = Modifier.size(56.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Default.Logout,
+                                    contentDescription = "Logout Button",
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable(
+                                        onClick = {
+                                            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                                            context.startActivity(intent)
+                                        }
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ){
+                                Text(
+                                    text = "App version: 1.xx",
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = "Open github page",
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    viewModel.changeUserBatteryTheme(!userBatteryChoice)
+                                },
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                modifier = Modifier.size(56.dp)
+                            ) {
+                                if (userBatteryChoice) {
+                                    Icon(
+                                        imageVector = Icons.Default.BatterySaver,
+                                        contentDescription = "Theme is based on battery saver: Press the button to on",
+                                        modifier = Modifier.size(28.dp),
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.BatteryFull,
+                                        contentDescription = "Theme is not based on battery saver: Press the button to off",
+                                        modifier = Modifier.size(28.dp),
+                                    )
                                 }
                             }
-                        )
-                        NavigationDrawerItem(
-                            label = {Text("Settings")},
-                            icon = {Icon(Icons.Default.Settings,"Option to show setting menu")},
-                            selected = false,
-                            onClick ={
-                                viewModel.handleDrawerItemClick {
-                                    Toast.makeText(context, "Setting Clicked (TODO)", Toast.LENGTH_SHORT).show()
-                                    scope.launch { drawerState.close() }
-                                }
-                            }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        NavigationDrawerItem(
-                            label = { Text("Illustrations") },
-                            icon = { Icon(painterResource(R.drawable.imagesmode_24px), "Illustrations") },
-                            selected = currentContentRoute == ContentRoutes.ILLUSTRATIONS,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                rootNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
-                                    popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                        NavigationDrawerItem(
-                            label = {Text("Manga")},
-                            icon = {Icon(Icons.Filled.PhotoAlbum,"Option to show following manga")},
-                            selected = currentContentRoute == ContentRoutes.MANGA,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                rootNavController.navigate(ContentRoutes.MANGA) {
-                                    popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                        NavigationDrawerItem(
-                            label = {Text("Novel")},
-                            icon = {Icon(Icons.AutoMirrored.Filled.LibraryBooks,"Option to show following novel")},
-                            selected = currentContentRoute == ContentRoutes.NOVEL,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                rootNavController.navigate(ContentRoutes.NOVEL) {
-                                    popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
+                        }
                     }
                 }
             },
@@ -314,7 +411,7 @@ fun MainAppShell(
                                             onClick = {
                                                 viewModel.handleHomeDropdownAction {
                                                     if (currentContentRoute != ContentRoutes.ILLUSTRATIONS) {
-                                                        rootNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
+                                                        contentNavController.navigate(ContentRoutes.ILLUSTRATIONS) {
                                                             popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                             launchSingleTop = true
                                                             restoreState = true
@@ -329,7 +426,7 @@ fun MainAppShell(
                                             onClick = {
                                                 viewModel.handleHomeDropdownAction{
                                                     if (currentContentRoute != ContentRoutes.MANGA) {
-                                                        rootNavController.navigate(ContentRoutes.MANGA) {
+                                                        contentNavController.navigate(ContentRoutes.MANGA) {
                                                             popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                             launchSingleTop = true
                                                             restoreState = true
@@ -344,7 +441,7 @@ fun MainAppShell(
                                             onClick = {
                                                 viewModel.handleHomeDropdownAction{
                                                     if (currentContentRoute != ContentRoutes.NOVEL) {
-                                                        rootNavController.navigate(ContentRoutes.NOVEL) {
+                                                        contentNavController.navigate(ContentRoutes.NOVEL) {
                                                             popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                             launchSingleTop = true
                                                             restoreState = true
@@ -359,7 +456,7 @@ fun MainAppShell(
                                             onClick = {
                                                 viewModel.handleHomeDropdownAction{
                                                     if (currentContentRoute != ContentRoutes.NEWEST) {
-                                                        rootNavController.navigate(ContentRoutes.NEWEST) {
+                                                        contentNavController.navigate(ContentRoutes.NEWEST) {
                                                             popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                             launchSingleTop = true
                                                             restoreState = true
@@ -374,7 +471,7 @@ fun MainAppShell(
                                             onClick = {
                                                 viewModel.handleHomeDropdownAction{
                                                     if (currentContentRoute != ContentRoutes.RANKING) {
-                                                        rootNavController.navigate(ContentRoutes.NEWEST) {
+                                                        contentNavController.navigate(ContentRoutes.NEWEST) {
                                                             popUpTo(ContentRoutes.ILLUSTRATIONS) { saveState = true }
                                                             launchSingleTop = true
                                                             restoreState = true
@@ -472,8 +569,8 @@ fun MainAppShell(
         }
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("If you are seeing this message that means, you have opened the app during the login process.")
-            Text("Please continue with the login or reopen the app.")
+            Text("This screen should disappear automatically ")
+            Text("If not, please continue with the login or reopen the app.")
         }
     }
 }

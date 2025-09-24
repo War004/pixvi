@@ -1,5 +1,6 @@
 package com.example.pixvi.screens.homeScreen
 
+import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -28,11 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import coil.compose.AsyncImage
-import coil.request.ErrorResult
-import coil.request.ImageRequest
-import coil.request.SuccessResult
-import com.example.pixvi.network.response.Home.Manga.Illust
+import coil3.compose.AsyncImage
+import com.example.pixvi.network.response.Home.Illust
 import com.example.pixvi.network.response.Home.ImageUtils
 import com.example.pixvi.network.response.Home.SaveAllFormat
 import com.example.pixvi.network.response.Home.SaveDestination
@@ -56,15 +54,16 @@ import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Shadow
-import coil.imageLoader
+import coil3.SingletonImageLoader
+import coil3.imageLoader
+import coil3.toBitmap
 import com.example.pixvi.FullImageScreenRoute
 import com.example.pixvi.network.BookmarkRestrict
-import com.example.pixvi.network.response.Home.Manga.RankingIllust
 import com.example.pixvi.screens.FloatingImageInfoToolbar
 import com.example.pixvi.utils.NormalImageRequest
 import com.example.pixvi.utils.PixivAsyncImage
-import com.example.pixvi.viewModels.ContentType
 import kotlinx.coroutines.flow.MutableSharedFlow
+import com.example.pixvi.screens.detail.ContentType
 
 
 @OptIn(FlowPreview::class)
@@ -93,7 +92,7 @@ fun MangaScreen(
             .debounce(400L) // Debounce for 400 milliseconds.
             .collect { (illust, visibility) ->
                 // This code runs only after 400ms of inactivity
-                mangaViewModel.toggleBookmark(
+                mangaViewModel.bookmarkToggled(
                     illustId = illust.id.toLong(),
                     isCurrentlyBookmarked = illust.is_bookmarked,
                     visibility = visibility
@@ -298,7 +297,7 @@ fun MangaScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MangaRankingCarousel(
-    illusts: List<RankingIllust>,
+    illusts: List<Illust>,
     onItemClick: (Int) -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier
@@ -352,11 +351,10 @@ private fun MangaRankingCarousel(
     }
 }
 
-// --- NEW COMPOSABLE: CarouselMangaItem ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CarouselItemScope.CarouselMangaItem(
-    illust: RankingIllust, // Takes RankingIllust type
+    illust: Illust,
     onClick: () -> Unit,
     navController: NavController,
     modifier: Modifier = Modifier
@@ -410,26 +408,8 @@ fun MangaItemRow(
     val isMultiPage = mangaIllust.page_count > 1 && mangaIllust.meta_pages.isNotEmpty()
     val pageCount = if (isMultiPage) mangaIllust.meta_pages.size else mangaIllust.page_count
 
-    val imageLoadStates = remember { mutableStateMapOf<Int, Boolean>() } //image states for showing the bottom sheet
-
-    val createImageRequestListener = remember {
-        { pageIndex: Int ->
-            object : ImageRequest.Listener {
-                override fun onStart(request: ImageRequest) {
-                    // When a new image starts loading, mark it as not loaded.
-                    imageLoadStates[pageIndex] = false
-                }
-                override fun onSuccess(request: ImageRequest, result: SuccessResult) {
-                    // When it succeeds, mark it as loaded.
-                    imageLoadStates[pageIndex] = true
-                }
-                override fun onError(request: ImageRequest, result: ErrorResult) {
-                    // On error, mark it as not loaded.
-                    imageLoadStates[pageIndex] = false
-                }
-            }
-        }
-    }
+    // This state map remains, but it will be updated safely.
+    val imageLoadStates = remember { mutableStateMapOf<Int, Boolean>() }
 
     val getDisplayedUrl = { pageIndex: Int ->
         if (isMultiPage) {
@@ -474,30 +454,12 @@ fun MangaItemRow(
                     onClick = {
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0
                         onNavigate(currentPageIndex)
-                        val allOriginalUrls: List<String> = if (isMultiPage) {
-                            mangaIllust.meta_pages.mapNotNull { it.image_urls.original }
-                        } else {
-                            listOfNotNull(mangaIllust.meta_single_page.original_image_url)
-                        }
-                        //waifu
-                        /*
-                        if (allOriginalUrls.isNotEmpty()) {
-
-                            navController.navigate(
-                                FullImageScreen(
-                                    illustId = mangaIllust.id,
-                                    initialPageIndex = currentPageIndex,
-                                    originalImageUrls = allOriginalUrls,
-                                )
-                            )
-                        } else {
-                            Toast.makeText(context, "Original image URL not found.", Toast.LENGTH_SHORT).show()
-                        }*/
                     },
                     onLongClick = {
                         val currentPageIndex = if (isMultiPage) pagerState.currentPage else 0
                         Log.d("MangaItemRow", "Long press on page $currentPageIndex")
 
+                        // This logic now works correctly because the state is updated safely.
                         if (imageLoadStates[currentPageIndex] == true) {
                             showMenuSheet = true
                         } else {
@@ -518,29 +480,23 @@ fun MangaItemRow(
                         ?: page?.image_urls?.medium
                         ?: mangaIllust.image_urls.medium
 
-                    val imageRequest = NormalImageRequest.normalImageRequest(context, imageUrl ?: "") { builder ->
-                        builder.listener(createImageRequestListener(pageIndex))
-                    }
-
-                    // 4. Use the standard `AsyncImage`, NOT your PixivAsyncImage.
-                    AsyncImage(
-                        model = imageRequest,
+                    // Use the new, safe helper composable
+                    MangaPageLoaderItem(
+                        imageUrl = imageUrl,
                         contentDescription = "$title (Page ${pageIndex + 1})",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        onLoadStateChange = { isLoaded ->
+                            imageLoadStates[pageIndex] = isLoaded
+                        }
                     )
                 }
             } else { // Single Page
-                val imageUrl = mangaIllust.image_urls.large ?: mangaIllust.image_urls.medium
-
-                val imageRequest = NormalImageRequest.normalImageRequest(context, imageUrl ?: "") { builder ->
-                    builder.listener(createImageRequestListener(0))
-                }
-                AsyncImage(
-                    model = imageRequest,
+                // Use the new, safe helper composable for single pages too
+                MangaPageLoaderItem(
+                    imageUrl = mangaIllust.image_urls.large ?: mangaIllust.image_urls.medium,
                     contentDescription = title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+                    onLoadStateChange = { isLoaded ->
+                        imageLoadStates[0] = isLoaded
+                    }
                 )
             }
 
@@ -580,7 +536,7 @@ fun MangaItemRow(
             }
         }
 
-        // Optimized Bottom Sheet Menu for image copying
+        // --- BottomSheet and other logic remains unchanged ---
         MaterialBottomSheetOptionsMenu(
             showSheet = showMenuSheet,
             onDismiss = { showMenuSheet = false },
@@ -643,16 +599,18 @@ fun MangaItemRow(
                             var copiedFromCache = false
 
                             if (displayedImageUrl != null) {
-                                val cacheKey = coil.memory.MemoryCache.Key(displayedImageUrl)
+                                val cacheKey = coil3.memory.MemoryCache.Key(displayedImageUrl)
 
                                 // Safely check Coil's memory cache
-                                context.imageLoader.memoryCache?.let { cache ->
-                                    val cachedBitmap = cache[cacheKey]?.bitmap
-                                    if (cachedBitmap != null) {
+                                SingletonImageLoader.get(context).memoryCache?.let { cache ->
+                                    val cachedImage = cache[cacheKey]?.image
+                                    if (cachedImage != null) {
                                         try {
+                                            val bitmap = cachedImage.toBitmap()
+
                                             ImageUtils.copyBitmapToClipboardViaCache(
                                                 context,
-                                                cachedBitmap,
+                                                bitmap,
                                                 mangaIllust.id,
                                                 currentPageIndex
                                             )
@@ -707,7 +665,7 @@ fun MangaItemRow(
                                 illustTitle = mangaIllust.title,
                                 totalPages = mangaIllust.page_count,
                                 originalImageUrls = originalImageUrlsList,
-                                )
+                            )
                             Toast.makeText(context, "PDF creation started for manga.", Toast.LENGTH_LONG).show()
                         } else {
                             Toast.makeText(context, "Could not get all original URLs for PDF.", Toast.LENGTH_SHORT).show()
@@ -722,11 +680,45 @@ fun MangaItemRow(
     }
 }
 
+/**
+ * A private helper composable that safely handles image loading state.
+ * It encapsulates the correct pattern of using a local state + LaunchedEffect.
+ */
+@Composable
+private fun MangaPageLoaderItem(
+    imageUrl: String?,
+    contentDescription: String,
+    onLoadStateChange: (Boolean) -> Unit
+) {
+    val context = LocalContext.current
 
+    var currentState by remember { mutableStateOf<coil3.compose.AsyncImagePainter.State>(coil3.compose.AsyncImagePainter.State.Empty) }
+    var lastReportedState by remember { mutableStateOf<Boolean?>(null) }
 
+    LaunchedEffect(currentState) {
+        val isSuccess = currentState is coil3.compose.AsyncImagePainter.State.Success
+        if (lastReportedState != isSuccess) {
+            onLoadStateChange(isSuccess)
+            lastReportedState = isSuccess
+        }
+    }
 
+    val imageRequest = remember(imageUrl) {
+        NormalImageRequest.normalImageRequest(context, imageUrl)
+    }
 
-// ... imports
+    AsyncImage(
+        model = imageRequest,
+        contentDescription = contentDescription,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop,
+        onState = { state ->
+            currentState = state
+        }
+    )
+}
+
+// ... other screens
 @Composable
 fun NovelScreen(navController: NavController) {
     Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {

@@ -1,13 +1,9 @@
 package com.example.pixvi.screens.detail
 
 import android.app.Application
-import com.example.pixvi.R
-import android.net.Uri
+
 import android.util.Log
-import androidx.appcompat.widget.Toolbar
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -16,29 +12,23 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FormatColorText
@@ -57,7 +47,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,45 +61,28 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import coil.compose.AsyncImage
 import com.example.pixvi.network.api.PixivApiService
 import com.example.pixvi.network.response.Detail.AuthorDetails
 import com.example.pixvi.network.response.Detail.NovelData
 import com.example.pixvi.utils.ContentBlock
-import com.example.pixvi.utils.NovelParser
 import com.example.pixvi.utils.PixivAsyncImage
 import com.example.pixvi.viewModels.NovelDetailViewModel
 import com.example.pixvi.viewModels.NovelDetailViewModelFactory
-import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
-import coil.request.ImageRequest
-import com.example.pixvi.network.response.Detail.Rating
-import com.example.pixvi.utils.AnimatedWebp
 import com.example.pixvi.utils.ColorPickerBottomSheet
-import com.example.pixvi.utils.NormalImageRequest
 import com.example.pixvi.utils.PageLineSlider
 import com.example.pixvi.utils.pageColorPalette
 import com.example.pixvi.utils.textColorPalette
 import com.example.pixvi.viewModels.NovelReaderSettings
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 
 
 /**
@@ -174,7 +146,7 @@ fun DetailNovelScreen(
         uiState.novelData != null && uiState.authorDetails != null -> {
             NovelContentScreen(
                 uiState = uiState,
-                viewModel = viewModel, // <-- PASS the ViewModel here
+                viewModel = viewModel,
                 novelId = uiState.novelData.id.toInt(),
                 onSwipeLeft = { Log.d("NovelNavigation", "Swipe Left Detected") },
                 onSwipeRight = { Log.d("NovelNavigation", "Swipe Right Detected") },

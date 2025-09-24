@@ -1,37 +1,12 @@
-package com.example.pixvi
+package com.example.pixvi.utils
 
-import android.app.Activity
 import androidx.palette.graphics.Palette
-import android.content.Context
 import android.graphics.Bitmap
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import android.util.Log
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.launch
-import java.security.KeyStore
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
-import java.nio.ByteBuffer
-import java.nio.charset.Charset
-import java.util.Base64
 import androidx.core.graphics.scale
 import androidx.core.graphics.get
-
-private const val TOKEN_KEY_ALIAS = "my_token_encryption_key" // Unique alias for token key
 
 /**
  * Extracts the dominant color from a specified position in a bitmap image.
@@ -132,118 +107,6 @@ fun shouldUseWhiteText(backgroundColor: Color): Boolean {
     return luminance < 0.5
 }
 
-// --- Key Generation/Retrieval (for Token) ---
-private fun getOrCreateTokenSecretKey(context: Context): SecretKey {
-    val keyStore = KeyStore.getInstance("AndroidKeyStore").apply {
-        load(null)
-    }
-
-    val existingKey = keyStore.getKey(TOKEN_KEY_ALIAS, null) as? SecretKey
-    if (existingKey != null) {
-        return existingKey
-    }
-
-    // Key generation parameters (AES, GCM, NoPadding)
-    val keyGenerator = KeyGenerator.getInstance(
-        KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
-    )
-
-    val keyGenSpec = KeyGenParameterSpec.Builder(
-        TOKEN_KEY_ALIAS,
-        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-    )
-        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-        .setKeySize(256)
-        .setUserAuthenticationRequired(false) // Adjust if user authentication needed
-        .build()
-
-    keyGenerator.init(keyGenSpec)
-    return keyGenerator.generateKey()
-}
-
-// --- Encryption Function (for Token) ---
-fun encryptToken(context: Context, tokenValue: String): String? {
-    return try {
-        val secretKey = getOrCreateTokenSecretKey(context)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-
-        val iv = cipher.iv
-        val encryptedBytes = cipher.doFinal(tokenValue.toByteArray(Charset.forName("UTF-8")))
-
-        val byteBuffer = ByteBuffer.allocate(iv.size + encryptedBytes.size)
-        byteBuffer.put(iv)
-        byteBuffer.put(encryptedBytes)
-        val combinedBytes = byteBuffer.array()
-
-        Base64.getEncoder().encodeToString(combinedBytes)
-    } catch (e: Exception) {
-        Log.e("TokenEncryption", "Encryption failed", e)
-        null // Return null in case of failure
-    }
-}
-
-// --- Decryption Function (for Token) ---
-fun decryptToken(context: Context, encryptedTokenBase64: String?): String? {
-    if (encryptedTokenBase64 == null) return null
-
-    return try {
-        val combinedBytes = Base64.getDecoder().decode(encryptedTokenBase64)
-        val byteBuffer = ByteBuffer.wrap(combinedBytes)
-
-        val ivLength = 12
-        val iv = ByteArray(ivLength)
-        byteBuffer.get(iv, 0, ivLength)
-        val encryptedTokenBytes = ByteArray(byteBuffer.remaining())
-        byteBuffer.get(encryptedTokenBytes, 0, encryptedTokenBytes.size)
-
-        val secretKey = getOrCreateTokenSecretKey(context)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        val gcmSpec = GCMParameterSpec(128, iv)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec)
-
-        val decryptedBytes = cipher.doFinal(encryptedTokenBytes)
-        String(decryptedBytes, Charset.forName("UTF-8"))
-    } catch (e: Exception) {
-        Log.e("TokenDecryption", "Decryption failed", e)
-        null // Return null if decryption fails
-    }
-}
-
-sealed class AppState{
-    object Loading: AppState()
-    object Authenticated : AppState()
-    object Unauthenticated : AppState()
-}
-
-// Function to retrieve and decrypt the token (you'll need this later)
-fun retrieveDecryptedToken(context: Context): String? {
-    val prefs = context.getSharedPreferences("my_app_tokens", Context.MODE_PRIVATE)
-    val encryptedToken = prefs.getString("secure_user_token", null)
-
-    return if (encryptedToken != null) {
-        decryptToken(context, encryptedToken)
-    } else {
-        null // No token found
-    }
-}
-
-fun hasSavedToken(context: Context): Boolean {
-    val prefs = context.getSharedPreferences("my_app_tokens", Context.MODE_PRIVATE)
-    val encryptedToken = prefs.getString("secure_user_token", null)
-    return encryptedToken != null // Return true if a token exists, false otherwise
-}
-
-// EncryptionUtils.kt
-
-// ... other functions (getOrCreateTokenSecretKey, encryptToken, decryptToken) ...
-
-fun clearEncryptedToken(context: Context) {
-    val prefs = context.getSharedPreferences("my_app_tokens", Context.MODE_PRIVATE)
-    prefs.edit().remove("secure_user_token").apply()
-}
-
 fun calculateAverageColorFromTop(bitmap: Bitmap, topPercent: Float): Color {
     val width = bitmap.width
     val height = bitmap.height
@@ -278,11 +141,4 @@ fun calculateAverageColorFromTop(bitmap: Bitmap, topPercent: Float): Color {
     val averageBlue = totalBlue / pixelCount
 
     return Color(averageRed, averageGreen, averageBlue)
-}
-fun Color.luminance(): Float {
-    val a = this.toArgb()
-    val red = android.graphics.Color.red(a) / 255f
-    val green = android.graphics.Color.green(a) / 255f
-    val blue = android.graphics.Color.blue(a) / 255f
-    return (0.299f * red) + (0.587f * green) + (0.114f * blue)
 }

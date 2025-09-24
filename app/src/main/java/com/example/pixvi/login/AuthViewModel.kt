@@ -54,6 +54,8 @@ class AuthViewModel : ViewModel(), TokenProvider {
         checkExistingLogin()
     }
 
+    fun checkLoggedIn(): Boolean = accountHelper?.isLoggedIn() ?: false
+
     /**
      * Check if user is already logged in using Android AccountManager.
      * Refreshes token proactively if needed.
