@@ -140,6 +140,9 @@ class SlidingWindowBoxBlur {
     /**
      * Applies one blur pass (horizontal + vertical).
      * Uses a sliding window technique that updates running sums efficiently.
+     *
+     * The vertical pass uses transpose → row blur → transpose to avoid
+     * cache-unfriendly column-strided memory access.
      */
     private fun applyBlurPass(src: IntArray, dst: IntArray, w: Int, h: Int, kernelSize: Int) {
         val radius = kernelSize / 2
@@ -154,82 +157,105 @@ class SlidingWindowBoxBlur {
             blurRow(src, dst, y * w, w, radius, multiplier, shift)
         }
 
-        // Vertical pass: blur each column, write back to src
-        for (x in 0 until w) {
-            blurColumn(dst, src, x, w, h, radius, multiplier, shift)
+        // Vertical pass via transpose → row blur → transpose
+        transpose(dst, src, w, h)
+        for (y in 0 until w) {
+            blurRow(src, dst, y * h, h, radius, multiplier, shift)
+        }
+        transpose(dst, src, h, w)
+    }
+
+    /**
+     * Transposes a w×h image in [src] into [dst] as h×w.
+     */
+    private fun transpose(src: IntArray, dst: IntArray, w: Int, h: Int) {
+        for (y in 0 until h) {
+            val rowOffset = y * w
+            for (x in 0 until w) {
+                dst[x * h + y] = src[rowOffset + x]
+            }
         }
     }
 
-    // Blurs a single row using sliding window
+    /**
+     * Blurs a single row using a sliding window, split into 3 regions:
+     *   1. Left edge  — removeX clamped to 0
+     *   2. Middle      — no clamping needed (hot path, ~93% of pixels)
+     *   3. Right edge  — addX clamped to width-1
+     */
     private fun blurRow(
         src: IntArray, dst: IntArray,
         rowStart: Int, width: Int, radius: Int,
         multiplier: Int, shift: Int
     ) {
         var sumA = 0; var sumR = 0; var sumG = 0; var sumB = 0
+        val lastIndex = width - 1
 
-        // Initialize window at left edge
-        for (kx in -radius..radius) {
-            val px = kx.coerceIn(0, width - 1)
-            val pixel = src[rowStart + px]
+        // Initialize window: seed sums for the first pixel's window
+        val firstPixel = src[rowStart]
+        val lastPixel = src[rowStart + lastIndex]
+
+        // Left-clamped portion: indices -radius..-1 all map to pixel 0
+        sumA = ((firstPixel shr 24) and 0xFF) * radius
+        sumR = ((firstPixel shr 16) and 0xFF) * radius
+        sumG = ((firstPixel shr 8) and 0xFF) * radius
+        sumB = (firstPixel and 0xFF) * radius
+
+        // In-bounds portion: indices 0..min(radius, lastIndex)
+        val initEnd = radius.coerceAtMost(lastIndex)
+        for (kx in 0..initEnd) {
+            val pixel = src[rowStart + kx]
             sumA += (pixel shr 24) and 0xFF
             sumR += (pixel shr 16) and 0xFF
             sumG += (pixel shr 8) and 0xFF
             sumB += pixel and 0xFF
         }
 
-        // Slide window across the row
-        for (x in 0 until width) {
+        // Right-clamped portion: if radius > lastIndex, remaining indices map to last pixel
+        val rightClamp = (radius - lastIndex).coerceAtLeast(0)
+        if (rightClamp > 0) {
+            sumA += ((lastPixel shr 24) and 0xFF) * rightClamp
+            sumR += ((lastPixel shr 16) and 0xFF) * rightClamp
+            sumG += ((lastPixel shr 8) and 0xFF) * rightClamp
+            sumB += (lastPixel and 0xFF) * rightClamp
+        }
+
+        // Region boundaries
+        val leftEnd = radius.coerceAtMost(width)                     // end of left edge
+        val rightStart = (width - radius - 1).coerceAtLeast(leftEnd) // start of right edge
+
+        // ── Region 1: Left edge (removeX clamped to 0) ──
+        for (x in 0 until leftEnd) {
             dst[rowStart + x] = packPixel(sumA, sumR, sumG, sumB, multiplier, shift)
-
-            if (x < width - 1) {
-                // Remove leftmost pixel from window
-                val removeX = (x - radius).coerceIn(0, width - 1)
-                val removePixel = src[rowStart + removeX]
-
-                // Add new rightmost pixel to window
-                val addX = (x + radius + 1).coerceIn(0, width - 1)
+            if (x < lastIndex) {
+                val removePixel = src[rowStart]
+                val addX = (x + radius + 1).coerceAtMost(lastIndex)
                 val addPixel = src[rowStart + addX]
-
                 sumA += ((addPixel shr 24) and 0xFF) - ((removePixel shr 24) and 0xFF)
                 sumR += ((addPixel shr 16) and 0xFF) - ((removePixel shr 16) and 0xFF)
                 sumG += ((addPixel shr 8) and 0xFF) - ((removePixel shr 8) and 0xFF)
                 sumB += (addPixel and 0xFF) - (removePixel and 0xFF)
             }
         }
-    }
 
-    // Blurs a single column using sliding window
-    private fun blurColumn(
-        src: IntArray, dst: IntArray,
-        x: Int, width: Int, height: Int, radius: Int,
-        multiplier: Int, shift: Int
-    ) {
-        var sumA = 0; var sumR = 0; var sumG = 0; var sumB = 0
-
-        // Initialize window at top edge
-        for (ky in -radius..radius) {
-            val py = ky.coerceIn(0, height - 1)
-            val pixel = src[py * width + x]
-            sumA += (pixel shr 24) and 0xFF
-            sumR += (pixel shr 16) and 0xFF
-            sumG += (pixel shr 8) and 0xFF
-            sumB += pixel and 0xFF
+        // ── Region 2: Middle — zero bounds checks ──
+        for (x in leftEnd until rightStart) {
+            dst[rowStart + x] = packPixel(sumA, sumR, sumG, sumB, multiplier, shift)
+            val removePixel = src[rowStart + x - radius]
+            val addPixel = src[rowStart + x + radius + 1]
+            sumA += ((addPixel shr 24) and 0xFF) - ((removePixel shr 24) and 0xFF)
+            sumR += ((addPixel shr 16) and 0xFF) - ((removePixel shr 16) and 0xFF)
+            sumG += ((addPixel shr 8) and 0xFF) - ((removePixel shr 8) and 0xFF)
+            sumB += (addPixel and 0xFF) - (removePixel and 0xFF)
         }
 
-        // Slide window down the column
-        for (y in 0 until height) {
-            dst[y * width + x] = packPixel(sumA, sumR, sumG, sumB, multiplier, shift)
-
-            if (y < height - 1) {
-                // Remove topmost pixel from window
-                val removeY = (y - radius).coerceIn(0, height - 1)
-                val removePixel = src[removeY * width + x]
-
-                // Add new bottommost pixel to window
-                val addY = (y + radius + 1).coerceIn(0, height - 1)
-                val addPixel = src[addY * width + x]
-
+        // ── Region 3: Right edge (addX clamped to lastIndex) ──
+        for (x in rightStart until width) {
+            dst[rowStart + x] = packPixel(sumA, sumR, sumG, sumB, multiplier, shift)
+            if (x < lastIndex) {
+                val removeX = (x - radius).coerceAtLeast(0)
+                val removePixel = src[rowStart + removeX]
+                val addPixel = src[rowStart + lastIndex]
                 sumA += ((addPixel shr 24) and 0xFF) - ((removePixel shr 24) and 0xFF)
                 sumR += ((addPixel shr 16) and 0xFF) - ((removePixel shr 16) and 0xFF)
                 sumG += ((addPixel shr 8) and 0xFF) - ((removePixel shr 8) and 0xFF)
