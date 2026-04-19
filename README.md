@@ -17,7 +17,7 @@ A Android application built with Kotlin and Jetpack Compose that provides a simp
 ## Screenshots & Features
 Home page
 
-<img width="300" alt="image" src="https://github.com/user-attachments/assets/02cd1f17-7591-4a7c-b548-e041507fdebc" /> <img width="300" alt="immersive mode image" src="https://github.com/user-attachments/assets/855dc8b0-4f71-4f2e-bd4b-5dd0755f44ad" />
+<img width="300" alt="image" src="https://github.com/user-attachments/assets/02cd1f17-7591-4a7c-b548-e041507fdebc" />
 
 ### Future Plans
 -Restore all the previous versions feature(novel playback, full screen image viewing, novel screen)
