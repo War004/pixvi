@@ -1,0 +1,39 @@
+# Gradle files
+.gradle/
+build/
+/*/build/
+
+# IntelliJ IDEA / Android Studio files
+.idea/
+*.iml
+*.ipr
+*.iws
+.navigation/
+
+# Local configuration files
+local.properties
+.deviceconfig
+
+# Built artifacts
+*.apk
+*.ap_
+*.aab
+*.aar
+
+# Log files
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Security/Keys
+*.jks
+*.keystore
+*.pk8
+*.pem
+
+# Captures / Native builds
+captures/
+.externalNativeBuild/
+.cxx/
