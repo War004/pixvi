@@ -7,6 +7,7 @@ import com.cryptic.piyek.feature.onboarding.OnboardingManager
 import com.cryptic.piyek.core.auth.domain.repository.OAuthUserRepository
 import com.cryptic.piyek.core.content.data.model.Artwork
 import com.cryptic.piyek.feature.onboarding.domain.repo.WalkthroughRepo
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -25,7 +26,8 @@ import kotlin.time.Duration.Companion.seconds
 class OnboardingViewModel(
     private val oAuthUserRepo: OAuthUserRepository,
     private val onboardingManager: OnboardingManager,
-    private val walkThroughRepo: WalkthroughRepo
+    private val walkThroughRepo: WalkthroughRepo,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ): ViewModel() {
 
     private val loadTrigger = MutableSharedFlow<Unit>(replay = 1).apply {
@@ -86,7 +88,7 @@ class OnboardingViewModel(
         val redirectUrl = onboardingManager.generateLoginUrl(codeVerifier)
 
         //save the code verifier in the dataStore
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(ioDispatcher) {
             oAuthUserRepo.saveCodeVerifier(codeVerifier)
         }
         return redirectUrl
