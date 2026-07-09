@@ -7,6 +7,7 @@ import androidx.room.Room
 import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.cryptic.piyek.core.DominantColorExtractor
+import com.cryptic.piyek.core.DominantColorInPartsExtractor
 import com.cryptic.piyek.core.database.AppDatabase
 import com.cryptic.piyek.core.network.NetworkResultCallAdapterFactory
 import com.cryptic.piyek.core.tink.TinkManager
@@ -134,6 +135,10 @@ class AppContainer(
 
     val dominantColorExtractor: DominantColorExtractor by lazy {
         DominantColorExtractor()
+    }
+
+    val dominantColorInPartsExtractor: DominantColorInPartsExtractor by lazy {
+        DominantColorInPartsExtractor()
     }
 
     val imageLoader by lazy {

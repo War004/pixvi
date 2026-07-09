@@ -3,6 +3,7 @@ package com.cryptic.piyek.feature.onboarding.presentation
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
+import android.graphics.Bitmap
 import android.util.Log
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedContent
@@ -13,6 +14,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,10 +27,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -46,6 +52,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
@@ -61,7 +68,7 @@ import coil3.compose.AsyncImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
-import com.cryptic.piyek.core.DominantColorExtractor
+import com.cryptic.piyek.core.DominantColorInPartsExtractor
 import com.cryptic.piyek.core.theme.getContrastTextColor
 import com.cryptic.piyek.core.theme.getTonalButtonColor
 import com.cryptic.piyek.core.content.data.model.Artwork
@@ -77,7 +84,7 @@ fun MyScreen(){
 fun OnboardingScreen(
     innerPadding: PaddingValues,
     onboardingViewModel: OnboardingViewModel,
-    colorExtractor: DominantColorExtractor
+    colorExtractor: DominantColorInPartsExtractor
 ) {
     val currentArtwork by onboardingViewModel.currentArtwork.collectAsStateWithLifecycle()
     val defaultBg = MaterialTheme.colorScheme.background
@@ -103,19 +110,24 @@ fun OnboardingScreen(
         val result = context.imageLoader.execute(request)
 
         var newColor = defaultBg
+        var loadedBitmap: Bitmap? = null
         if (result is coil3.request.SuccessResult) {
             try {
                 val bitmap = (result.image as? coil3.BitmapImage)?.bitmap
                 if (bitmap != null) {
+                    loadedBitmap = bitmap
                     val colorInt = colorExtractor.extract(
-                        input = bitmap, stride = 4, startYPercent = 0.90f, endYPercent = 1.0f
+                        input = bitmap,
+                        stride = 4,
+                        startYPercent = 0.85f,
+                        endYPercent = 0.95f
                     )
                     if (colorInt != android.graphics.Color.BLACK) newColor = Color(colorInt)
                 }
             } catch (_: Exception) { /* Keep defaultBg */ }
         }
 
-        currentFrame = CarouselFrame(artwork = artwork, color = newColor)
+        currentFrame = CarouselFrame(artwork = artwork, color = newColor, bitmap = loadedBitmap)
     }
 
     val masterTransition = updateTransition(targetState = currentFrame, label = "CarouselSync")
@@ -153,14 +165,28 @@ fun OnboardingScreen(
             ) { targetFrame ->
                 Box(modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.onBackground)) {
+                    .background(MaterialTheme.colorScheme.surfaceVariant)) {
                     if (targetFrame.artwork != null) {
-                        AsyncImage(
-                            model = targetFrame.artwork.quality.firstPage.original,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        val imageBitmap = remember(targetFrame.bitmap) {
+                            targetFrame.bitmap?.asImageBitmap()
+                        }
+                        if (imageBitmap != null) {
+                            Image(
+                                bitmap = imageBitmap,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Image,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .align(Alignment.Center),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
@@ -192,6 +218,15 @@ fun OnboardingScreen(
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Image,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .align(Alignment.Center),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
                     }
                 }
             }
@@ -348,5 +383,6 @@ fun OnboardingControls(
 
 data class CarouselFrame(
     val artwork: Artwork? = null,
-    val color: Color
+    val color: Color,
+    val bitmap: Bitmap? = null
 )

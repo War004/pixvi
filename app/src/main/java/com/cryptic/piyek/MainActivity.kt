@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
                             OnboardingScreen(
                                 innerPadding = innerPadding,
                                 onboardingViewModel = onBoardingVIewModel,
-                                colorExtractor = app.container.dominantColorExtractor
+                                colorExtractor = app.container.dominantColorInPartsExtractor
                             )
                         }
                         is AppAuthState.Authenticated -> {
