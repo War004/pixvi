@@ -9,6 +9,7 @@ build/
 *.ipr
 *.iws
 .navigation/
+app/release/
 
 # Local configuration files
 local.properties
