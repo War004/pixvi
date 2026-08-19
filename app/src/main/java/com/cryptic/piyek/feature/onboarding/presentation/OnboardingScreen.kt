@@ -64,22 +64,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.BitmapImage
 import coil3.compose.AsyncImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import coil3.request.allowHardware
+import com.cryptic.piyek.components.ContentBlink
 import com.cryptic.piyek.core.DominantColorInPartsExtractor
 import com.cryptic.piyek.core.theme.getContrastTextColor
 import com.cryptic.piyek.core.theme.getTonalButtonColor
 import com.cryptic.piyek.core.content.data.model.Artwork
 import kotlinx.coroutines.launch
 
-
-@Preview
-@Composable
-fun MyScreen(){
-
-}
 @Composable
 fun OnboardingScreen(
     innerPadding: PaddingValues,
@@ -111,9 +108,9 @@ fun OnboardingScreen(
 
         var newColor = defaultBg
         var loadedBitmap: Bitmap? = null
-        if (result is coil3.request.SuccessResult) {
+        if (result is SuccessResult) {
             try {
-                val bitmap = (result.image as? coil3.BitmapImage)?.bitmap
+                val bitmap = (result.image as? BitmapImage)?.bitmap
                 if (bitmap != null) {
                     loadedBitmap = bitmap
                     val colorInt = colorExtractor.extract(
@@ -178,14 +175,18 @@ fun OnboardingScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
-                            Icon(
-                                imageVector = Icons.Rounded.Image,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .align(Alignment.Center),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                            )
+                            ContentBlink(
+                                modifier = Modifier.align(Alignment.Center),
+                                durationMillis = 1500,
+                                targetValue = 0.1f
+                            ){icon ->
+                                Icon(
+                                    imageVector = Icons.Rounded.Image,
+                                    contentDescription = null,
+                                    modifier = icon.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 1.0f)
+                                )
+                            }
                         }
                         Box(
                             modifier = Modifier
@@ -219,14 +220,18 @@ fun OnboardingScreen(
                             )
                         }
                     } else {
-                        Icon(
-                            imageVector = Icons.Rounded.Image,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .align(Alignment.Center),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                        )
+                        ContentBlink(
+                            modifier = Modifier.align(Alignment.Center),
+                            durationMillis = 1500,
+                            targetValue = 0.1f
+                        ){icon ->
+                            Icon(
+                                imageVector = Icons.Rounded.Image,
+                                contentDescription = null,
+                                modifier = icon.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 1.0f)
+                            )
+                        }
                     }
                 }
             }
@@ -336,16 +341,13 @@ fun OnboardingControls(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
                 Text(
+                    modifier = Modifier.padding(vertical = 10.dp),
                     text = "OR",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Medium,
                     color = textColor.copy(alpha = 0.7f)
                 )
-
-                //Spacer(modifier = Modifier.height(16.dp))
 
                 // SECONDARY BUTTON (Tonal Blend)
                 OutlinedButton( // Changed from standard Button to OutlinedButton
