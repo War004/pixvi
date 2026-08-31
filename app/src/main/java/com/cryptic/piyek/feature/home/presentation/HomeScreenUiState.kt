@@ -1,4 +1,8 @@
 package com.cryptic.piyek.feature.home.presentation
 
-class HomeScreenUiState {
-}
+import androidx.compose.foundation.text.input.TextFieldState
+
+data class HomeScreenUiState(
+    val textFiledState: TextFieldState,
+    val isSearchActive: Boolean
+)

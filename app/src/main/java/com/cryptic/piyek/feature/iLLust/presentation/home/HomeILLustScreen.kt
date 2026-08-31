@@ -1,5 +1,6 @@
 package com.cryptic.piyek.feature.iLLust.presentation.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
@@ -45,15 +47,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.cryptic.piyek.core.content.data.model.Artwork
+import com.cryptic.piyek.ui.theme.GoldenRanking
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlin.math.abs
+import kotlin.time.Duration.Companion.milliseconds
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -102,9 +107,8 @@ fun HomeILLustScreen(
             }
     }
 
-    // -- Active-index tracking ------------------------------------------------
-    LaunchedEffect(listState) {
-        // Offset to skip the ranking carousel header item.
+    // Track which item crosses the ~35% screen threshold to update the active focus state
+    LaunchedEffect(listState, uiState.rankingList.isNotEmpty()) {
         val rankingHeaderOffset = if (uiState.rankingList.isNotEmpty()) 1 else 0
 
         snapshotFlow {
@@ -112,17 +116,27 @@ fun HomeILLustScreen(
             val visibleItems = layoutInfo.visibleItemsInfo
             if (visibleItems.isEmpty()) return@snapshotFlow null
 
-            val viewportCenterY = layoutInfo.viewportSize.height / 2f
+            // 35% from the top of the viewport
+            val targetLineY = (layoutInfo.viewportSize.height * 0.35f).toInt()
 
-            visibleItems
+            val intersectingItem = visibleItems
+                .filter { it.index >= rankingHeaderOffset }
+                .firstOrNull { item ->
+                    val itemTop = item.offset
+                    val itemBottom = item.offset + item.size
+                    targetLineY in itemTop until itemBottom
+                }
+
+            val selectedItem = intersectingItem ?: visibleItems
                 .filter { it.index >= rankingHeaderOffset }
                 .minByOrNull { item ->
-                    val itemCenterY = item.offset + (item.size / 2f)
-                    abs(itemCenterY - viewportCenterY)
+                    val itemCenterY = item.offset + (item.size / 2)
+                    abs(itemCenterY - targetLineY)
                 }
-                ?.let { it.index - rankingHeaderOffset }
+
+            selectedItem?.let { it.index - rankingHeaderOffset }
         }
-            .debounce(200L)
+            .debounce(200L.milliseconds)
             .distinctUntilChanged()
             .filterNotNull()
             .collect { index ->
@@ -303,9 +317,16 @@ fun RankingCarousel(
                 fontWeight = FontWeight.Bold,
             )
             Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = onSeeMoreClick) {
+            TextButton(
+                onClick = onSeeMoreClick,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = GoldenRanking
+                )
+            ) {
                 Text("See more")
                 Icon(
+                    modifier = Modifier.padding(start = 10.dp),
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "See more ranking illustrations",
                 )
@@ -355,7 +376,7 @@ fun CarouselItemScope.CarouselArtworkItem(
         AsyncImage(
             model = artwork.quality.firstPage.medium,
             contentDescription = artwork.title,
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Fit,
         )
 
         Text(

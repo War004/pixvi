@@ -1,4 +1,6 @@
 package com.cryptic.piyek.feature.home.presentation
 
-interface HomeScreenAction {
+sealed interface HomeScreenAction {
+    data class SearchStatusChange(val newValue: Boolean): HomeScreenAction
+    data class NewUiMode(val newUIMode: NavOptions): HomeScreenAction
 }

@@ -1,19 +1,18 @@
 package com.cryptic.piyek.feature.home.presentation
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Menu
@@ -21,31 +20,29 @@ import androidx.compose.material.icons.outlined.QuestionMark
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cryptic.piyek.R
 import com.cryptic.piyek.components.FloatingImageInfoToolbar
-import com.cryptic.piyek.core.content.data.model.ArtworkContentList
-import com.cryptic.piyek.core.content.data.model.RecommendationNonNovelPara
-import com.cryptic.piyek.core.content.domain.repo.CoreContentApiRepo
+import com.cryptic.piyek.components.SearchBar
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 /*
 Two parameters,
@@ -62,65 +59,52 @@ fun HomeScreen(
     //novelHomeViewModel: @Composable () -> Unit,
     //backStack: Any,
 ){
-    val uiState by homeViewModel.activeArtwork.collectAsStateWithLifecycle()
+    val activeArtwork by homeViewModel.activeArtwork.collectAsStateWithLifecycle()
+    val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-    val textFieldState = rememberTextFieldState(initialText ="")
-    val scrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val isTextFieldFocused by interactionSource.collectIsFocusedAsState()
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    BackHandler(enabled = uiState.isSearchActive) {
+        focusManager.clearFocus()
+        homeViewModel.action(HomeScreenAction.SearchStatusChange(false))
+    }
+
+    LaunchedEffect(uiState.isSearchActive) {
+        if (!uiState.isSearchActive) {
+            delay(100L.milliseconds)
+            focusManager.clearFocus()
+        }
+    }
+
+    //bring the keyboard back after configuration changes
+    LaunchedEffect(Unit) {
+        if (uiState.isSearchActive) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = {
-                    BasicTextField(
-                        state = textFieldState,
-                        scrollState = scrollState,
-                        modifier = Modifier.fillMaxWidth(),
-                        interactionSource = interactionSource,
-                        textStyle = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 16.sp
-                        ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        lineLimits = TextFieldLineLimits.SingleLine,
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Search
-                        ),
-                        onKeyboardAction = {
-                            focusManager.clearFocus()
+                    SearchBar(
+                        textFieldState = uiState.textFiledState,
+                        onSearch = {
+                            homeViewModel.action(HomeScreenAction.SearchStatusChange(false))
                         },
-                        decorator = { innerTextField ->
-                            Row(
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { /*TODO filter logic to be done*/ }) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.filter_icon),
-                                        contentDescription = "Tune Icon"
-                                    )
-                                }
-
-                                Box(modifier = Modifier
-                                    .padding(end = 15.dp)
-                                ) {
-                                    if (textFieldState.text.isEmpty()) {
-                                        Text(
-                                            text = "Search or enter URL",
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    innerTextField()
+                        onFilterClick = {},
+                        modifier = Modifier
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused) {
+                                    homeViewModel.action(HomeScreenAction.SearchStatusChange(true))
                                 }
                             }
-                        }
                     )
                 },
                 navigationIcon = {
@@ -162,12 +146,39 @@ fun HomeScreen(
             iLLustHomeScreen()
 
             FloatingImageInfoToolbar(
-                artwork = uiState,
+                artwork = activeArtwork,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 16.dp, vertical = 16.dp)
                     .fillMaxWidth(),
             )
         }
+
+        AnimatedVisibility(
+            visible = uiState.isSearchActive,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    // Tapping the dimmed area clears focus and dismisses the scrim
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            focusManager.clearFocus()
+                            homeViewModel.action(HomeScreenAction.SearchStatusChange(false))
+                        })
+                    }
+            )
+        }
     }
+}
+
+@Composable
+fun HomeScreenImpl(
+
+){
+
 }

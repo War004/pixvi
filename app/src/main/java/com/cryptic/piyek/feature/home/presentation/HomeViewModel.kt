@@ -1,5 +1,7 @@
 package com.cryptic.piyek.feature.home.presentation
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cryptic.piyek.core.content.data.model.Artwork
@@ -22,6 +24,13 @@ class HomeViewModel(
     private val _uiMode = MutableStateFlow<NavOptions>(NavOptions.ILLust)
     val uiMode = _uiMode.asStateFlow()
 
+    private val _uiState = MutableStateFlow<HomeScreenUiState>(HomeScreenUiState(
+        textFiledState = TextFieldState(""),
+        isSearchActive = false
+    ))
+
+    val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
+
     val activeArtwork: StateFlow<Artwork?> = iLLustRepo.contentList
         .map { contentList ->
             // Safely extract the artwork using getOrNull to prevent IndexOutOfBounds runtime crashes
@@ -33,7 +42,19 @@ class HomeViewModel(
             initialValue = null
         )
 
-    fun changeUiMode(newUiMode: NavOptions){
+    fun action(action: HomeScreenAction){
+        when(action){
+            is HomeScreenAction.SearchStatusChange -> {changeSearchStatus(action.newValue)}
+            is HomeScreenAction.NewUiMode -> {changeUiMode(action.newUIMode)}
+        }
+    }
+    private fun changeUiMode(newUiMode: NavOptions){
         _uiMode.value = newUiMode
+    }
+
+    private fun changeSearchStatus(isFocused: Boolean){
+        _uiState.update {
+            it.copy(isSearchActive = isFocused)
+        }
     }
 }
