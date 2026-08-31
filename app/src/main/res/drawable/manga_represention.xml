@@ -1,0 +1,112 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Outer Manga Page Frame (20dp Live Area) -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6,2.5
+            h12
+            c1.6,0 2.5,0.9 2.5,2.5
+            v14
+            c0,1.6 -0.9,2.5 -2.5,2.5
+            H6
+            c-1.6,0 -2.5,-0.9 -2.5,-2.5
+            V5
+            c0,-1.6 0.9,-2.5 2.5,-2.5 Z" />
+
+    <!-- Diagonal Manga Panel Divider (Creates Bottom-Left Triangular Panel) -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M3.5,13.5 L12.5,21.5" />
+
+    <!-- Bottom-Left Panel: Manga Action/Focus Lines -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M5.5,16.5 L7.5,19.5" />
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M7.5,15.5 L9.5,18.5" />
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M9.5,14.5 L10.5,16" />
+
+    <!-- Top-Left: Dialogue Speech Balloon Pointing to Detective -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5.5,7
+            C5.5,5.6 6.6,4.5 8,4.5
+            C9.4,4.5 10.5,5.6 10.5,7
+            C10.5,7.7 10.2,8.3 9.7,8.7
+            L10.5,10.5
+            L8.5,9.5
+            C8.3,9.5 8.2,9.5 8,9.5
+            C6.6,9.5 5.5,8.4 5.5,7 Z" />
+
+    <!-- Speech Balloon Text Stroke -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M7,7 H9" />
+
+    <!-- Detective Fedora Hat: Brim -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M11.5,11
+            C13.5,10.5 15.5,9 18.5,7" />
+
+    <!-- Detective Fedora Hat: Crown -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M13.5,9.5
+            C13.5,6.5 15,5.5 17,5.5
+            C18.5,5.5 19.5,6.5 19.5,7.5" />
+
+    <!-- Detective Profile: Nose and Jaw -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14.5,10.5 V12 L16,12.5" />
+
+    <!-- Trench Coat Lapel -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M16,12.5
+            L14,15
+            L16.5,17
+            L15,20.5" />
+
+    <!-- Background Manga Dynamic Panel Cut Line -->
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:pathData="M17.5,13 L20.5,11.5" />
+
+</vector>

@@ -4,5 +4,6 @@ import androidx.compose.foundation.text.input.TextFieldState
 
 data class HomeScreenUiState(
     val textFiledState: TextFieldState,
-    val isSearchActive: Boolean
+    val isSearchActive: Boolean,
+    val currentDestination: NavOptions = NavOptions.ILLust
 )

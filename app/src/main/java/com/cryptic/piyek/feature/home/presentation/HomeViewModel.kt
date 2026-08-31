@@ -21,8 +21,6 @@ class HomeViewModel(
     private val iLLustRepo: CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList>
     //others repo for the future
 ): ViewModel() {
-    private val _uiMode = MutableStateFlow<NavOptions>(NavOptions.ILLust)
-    val uiMode = _uiMode.asStateFlow()
 
     private val _uiState = MutableStateFlow<HomeScreenUiState>(HomeScreenUiState(
         textFiledState = TextFieldState(""),
@@ -30,6 +28,7 @@ class HomeViewModel(
     ))
 
     val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
+    val destinationWindows: List<NavOptions> = listOf(NavOptions.ILLust, NavOptions.Manga,NavOptions.Novel)
 
     val activeArtwork: StateFlow<Artwork?> = iLLustRepo.contentList
         .map { contentList ->
@@ -48,8 +47,14 @@ class HomeViewModel(
             is HomeScreenAction.NewUiMode -> {changeUiMode(action.newUIMode)}
         }
     }
+
+    /*
+    Need to validate that the entries between the destinationWindow and avliable option in NavOptions are in sync.
+    */
     private fun changeUiMode(newUiMode: NavOptions){
-        _uiMode.value = newUiMode
+        _uiState.update {
+            it.copy(currentDestination = newUiMode)
+        }
     }
 
     private fun changeSearchStatus(isFocused: Boolean){
