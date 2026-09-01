@@ -25,6 +25,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.cryptic.piyek.feature.home.presentation.HomeRoute
 import com.cryptic.piyek.feature.home.presentation.HomeScreen
 import com.cryptic.piyek.feature.home.presentation.HomeViewModel
 import com.cryptic.piyek.feature.iLLust.presentation.home.HomeILLustScreen
@@ -95,7 +96,9 @@ class MainActivity : ComponentActivity() {
                                     viewModelFactory {
                                         initializer {
                                             HomeViewModel(
-                                                iLLustRepo = app.container.iLLustRepo
+                                                iLLustRepo = app.container.iLLustRepo,
+                                                activeAccountId = state.accountId,
+                                                oAuthUserRepository = app.container.oAuthUserRepository
                                             )
                                         }
                                     }
@@ -112,7 +115,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             )
-                            HomeScreen(
+                            HomeRoute(
                                 homeViewModel = homeVIewModel,
                                 iLLustHomeScreen = {
                                     HomeILLustScreen(
