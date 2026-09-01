@@ -1,7 +1,11 @@
 package com.cryptic.piyek.feature.home.presentation
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.AnimationState
+import androidx.compose.animation.core.animateTo
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -36,6 +40,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +81,7 @@ fun HomeScreen(
 ){
     val activeArtwork by homeViewModel.activeArtwork.collectAsStateWithLifecycle()
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val saveableStateHolder = rememberSaveableStateHolder()
 
     var isNavigatorVisible by rememberSaveable { mutableStateOf(false) }
     var navigatorInteractionKey by remember { mutableLongStateOf(0L) }
@@ -113,135 +119,151 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            TopAppBar(
-                title = {
-                    SearchBar(
-                        textFieldState = uiState.textFiledState,
-                        onSearch = {
-                            homeViewModel.action(HomeScreenAction.SearchStatusChange(false))
-                        },
-                        onFilterClick = {},
-                        modifier = Modifier
-                            .focusRequester(focusRequester)
-                            .onFocusChanged { focusState ->
-                                if (focusState.isFocused) {
-                                    homeViewModel.action(HomeScreenAction.SearchStatusChange(true))
-                                }
-                            }
-                    )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            /*TODO*/
-                        })
-                    {
-                        Icon(
-                            imageVector = Icons.Outlined.Menu,
-                            contentDescription = "Menu Icon"
-                        )
-                    }
-                },
-                actions = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box {
-                            IconButton(
-                                onClick = {
-                                    isNavigatorVisible = !isNavigatorVisible
-                                    navigatorInteractionKey++
-                                },
-                            ) {
-                                Icon(
-                                    imageVector = when (uiState.currentDestination) {
-                                        is NavOptions.ILLust -> ImageVector.vectorResource(R.drawable.illust_represention)
-                                        is NavOptions.Manga -> ImageVector.vectorResource(R.drawable.manga_represention)
-                                        is NavOptions.Novel -> Icons.Outlined.Book
-                                    },
-                                    contentDescription = "Toggle navigation mode"
-                                )
-                            }
-                        }
-                    }
-                },
-                scrollBehavior = scrollBehavior
-            )
-        },
-    ) { paddingValues ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            //decide which screen to show
-            when (val destination = uiState.currentDestination) {
-                is NavOptions.Novel -> {
-                    Text("This should be the novel screen!")
-                }
-                else -> {
-                    when (destination) {
-                        is NavOptions.Manga -> Text("This should be the manga screen!")
-                        is NavOptions.ILLust -> iLLustHomeScreen()
-                    }
-                    FloatingImageInfoToolbar(
-                        artwork = activeArtwork,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                    )
-                }
-            }
-
-            // Vertical Home Navigator floating panel
-            AnimatedVisibility(
-                visible = isNavigatorVisible,
-                enter = slideInHorizontally(initialOffsetX = { -it }),
-                exit = fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = maxHeight * 0.30f, start = 25.dp)
+    LaunchedEffect(uiState.currentDestination) {
+        if (scrollBehavior.state.heightOffset < 0f) {
+            AnimationState(initialValue = scrollBehavior.state.heightOffset).animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 250)
             ) {
-                VerticalHomeNavigator(
-                    currentWindow = uiState.currentDestination,
-                    availableWindow = homeViewModel.destinationWindows,
-                    onWindowChange = { option ->
-                        homeViewModel.action(HomeScreenAction.NewUiMode(option))
-                        navigatorInteractionKey++
-                    },
-                    modifier = Modifier.pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                if (event.changes.any { it.pressed }) {
-                                    navigatorInteractionKey++
-                                }
-                            }
-                        }
-                    }
-                )
+                scrollBehavior.state.heightOffset = value
             }
         }
+    }
 
-        AnimatedVisibility(
-            visible = uiState.isSearchActive,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.fillMaxSize()
-        ) {
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize()
+    ){
+        Scaffold(
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        SearchBar(
+                            textFieldState = uiState.textFiledState,
+                            onSearch = {
+                                homeViewModel.action(HomeScreenAction.SearchStatusChange(false))
+                            },
+                            onFilterClick = {},
+                            modifier = Modifier
+                                .focusRequester(focusRequester)
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        homeViewModel.action(HomeScreenAction.SearchStatusChange(true))
+                                    }
+                                }
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(
+                            onClick = {
+                                /*TODO*/
+                            })
+                        {
+                            Icon(
+                                imageVector = Icons.Outlined.Menu,
+                                contentDescription = "Menu Icon"
+                            )
+                        }
+                    },
+                    actions = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box {
+                                IconButton(
+                                    onClick = {
+                                        isNavigatorVisible = !isNavigatorVisible
+                                        navigatorInteractionKey++
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = when (uiState.currentDestination) {
+                                            is NavOptions.ILLust -> ImageVector.vectorResource(R.drawable.illust_represention)
+                                            is NavOptions.Manga -> ImageVector.vectorResource(R.drawable.manga_represention)
+                                            is NavOptions.Novel -> Icons.Outlined.Book
+                                        },
+                                        contentDescription = "Toggle navigation mode"
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    scrollBehavior = scrollBehavior
+                )
+            },
+        ) { paddingValues ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    // Tapping the dimmed area clears focus and dismisses the scrim
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = {
-                            focusManager.clearFocus()
-                            homeViewModel.action(HomeScreenAction.SearchStatusChange(false))
-                        })
+                    .padding(paddingValues)
+            ) {
+                //decide which screen to show
+                saveableStateHolder.SaveableStateProvider(key = uiState.currentDestination::class.java.simpleName) {
+                    when (val destination = uiState.currentDestination) {
+                        is NavOptions.Novel -> {
+                            Text("This should be the novel screen!")
+                        }
+                        else -> {
+                            when (destination) {
+                                is NavOptions.Manga -> Text("This should be the manga screen!")
+                                is NavOptions.ILLust -> iLLustHomeScreen()
+                            }
+                            FloatingImageInfoToolbar(
+                                artwork = activeArtwork,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(16.dp)
+                                    .fillMaxWidth(),
+                            )
+                        }
                     }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = uiState.isSearchActive,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        // Tapping the dimmed area clears focus and dismisses the scrim
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = {
+                                focusManager.clearFocus()
+                                homeViewModel.action(HomeScreenAction.SearchStatusChange(false))
+                            })
+                        }
+                )
+            }
+        }
+        // Vertical Home Navigator floating panel
+        AnimatedVisibility(
+            visible = isNavigatorVisible,
+            enter = slideInHorizontally(initialOffsetX = { -it }),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = maxHeight * 0.30f, start = 25.dp)
+        ) {
+            VerticalHomeNavigator(
+                currentWindow = uiState.currentDestination,
+                availableWindow = homeViewModel.destinationWindows,
+                onWindowChange = { option ->
+                    homeViewModel.action(HomeScreenAction.NewUiMode(option))
+                    navigatorInteractionKey++
+                },
+                modifier = Modifier.pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.changes.any { it.pressed }) {
+                                navigatorInteractionKey++
+                            }
+                        }
+                    }
+                }
             )
         }
     }

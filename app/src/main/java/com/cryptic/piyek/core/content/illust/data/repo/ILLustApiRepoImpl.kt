@@ -1,5 +1,6 @@
 package com.cryptic.piyek.core.content.illust.data.repo
 
+import android.util.Log
 import com.cryptic.piyek.core.CResponse
 import com.cryptic.piyek.core.content.data.model.Artwork
 import com.cryptic.piyek.core.content.data.model.ArtworkContentList

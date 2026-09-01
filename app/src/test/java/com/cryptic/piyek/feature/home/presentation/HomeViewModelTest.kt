@@ -46,7 +46,7 @@ class HomeViewModelTest {
         val viewModel = HomeViewModel(iLLustRepo)
 
         // Assert
-        assertEquals(NavOptions.ILLust, viewModel.uiMode.value)
+        assertEquals(NavOptions.ILLust, viewModel.uiState.value.currentDestination)
     }
 
     @Test
@@ -58,7 +58,7 @@ class HomeViewModelTest {
         viewModel.action(HomeScreenAction.NewUiMode(NavOptions.Manga))
 
         // Assert
-        assertEquals(NavOptions.Manga, viewModel.uiMode.value)
+        assertEquals(NavOptions.Manga, viewModel.uiState.value.currentDestination)
     }
 
     @Test
@@ -70,7 +70,7 @@ class HomeViewModelTest {
         viewModel.action(HomeScreenAction.NewUiMode(NavOptions.Novel))
 
         // Assert
-        assertEquals(NavOptions.Novel, viewModel.uiMode.value)
+        assertEquals(NavOptions.Novel, viewModel.uiState.value.currentDestination)
     }
 
     // ========================================================================

@@ -1,5 +1,6 @@
 package com.cryptic.piyek.feature.iLLust.presentation.home
 
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -108,37 +109,30 @@ fun HomeILLustScreen(
     }
 
     // Track which item crosses the ~35% screen threshold to update the active focus state
-    LaunchedEffect(listState, uiState.rankingList.isNotEmpty()) {
-        val rankingHeaderOffset = if (uiState.rankingList.isNotEmpty()) 1 else 0
-
+    // Track which item is closest to the ~35% screen line to update active focus
+    LaunchedEffect(listState) {
         snapshotFlow {
+            if (!listState.isScrollInProgress) return@snapshotFlow null
+
             val layoutInfo = listState.layoutInfo
-            val visibleItems = layoutInfo.visibleItemsInfo
-            if (visibleItems.isEmpty()) return@snapshotFlow null
+            val viewportHeight = layoutInfo.viewportSize.height
+            val rankingHeaderOffset = if (uiState.rankingList.isNotEmpty()) 1 else 0
 
-            // 35% from the top of the viewport
-            val targetLineY = (layoutInfo.viewportSize.height * 0.35f).toInt()
+            if (viewportHeight <= 0 || layoutInfo.totalItemsCount <= rankingHeaderOffset) {
+                return@snapshotFlow null
+            }
 
-            val intersectingItem = visibleItems
+            val targetLineY = (viewportHeight * 0.35f).toInt()
+
+            // Filter out the header and pick the item whose center is closest to the 35% line
+            layoutInfo.visibleItemsInfo
                 .filter { it.index >= rankingHeaderOffset }
-                .firstOrNull { item ->
-                    val itemTop = item.offset
-                    val itemBottom = item.offset + item.size
-                    targetLineY in itemTop until itemBottom
-                }
-
-            val selectedItem = intersectingItem ?: visibleItems
-                .filter { it.index >= rankingHeaderOffset }
-                .minByOrNull { item ->
-                    val itemCenterY = item.offset + (item.size / 2)
-                    abs(itemCenterY - targetLineY)
-                }
-
-            selectedItem?.let { it.index - rankingHeaderOffset }
+                .minByOrNull { item -> abs((item.offset + item.size / 2) - targetLineY) }
+                ?.let { it.index - rankingHeaderOffset }
         }
-            .debounce(200L.milliseconds)
-            .distinctUntilChanged()
             .filterNotNull()
+            .distinctUntilChanged()
+            .debounce(200L.milliseconds)
             .collect { index ->
                 homeILLustViewModel.onAction(HomeILLustAction.UpdateFocusedIndex(index))
             }
