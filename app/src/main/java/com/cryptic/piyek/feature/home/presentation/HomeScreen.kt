@@ -147,7 +147,7 @@ fun HomeScreen(
         onCardClick = { /* Handle Profile Card Click */ },
         onProfilePicClick = { /* Handle Avatar Click */ },
         onManageAccountsClick = { /* Handle Settings Click */ },
-        onLogoutClick = { /* Handle Logout */ },
+        onLogoutClick = {onAction(HomeScreenAction.LogOut)},
         currentAccount = uiState.currentAccount
     ) { onOpenDrawer ->
         BoxWithConstraints(

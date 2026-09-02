@@ -8,14 +8,22 @@ import com.cryptic.piyek.core.database.CODE_VERIFIER
 import com.cryptic.piyek.core.auth.data.local.db.OAuthUserDao
 import com.cryptic.piyek.core.auth.data.local.db.OAuthUserEntity
 import com.cryptic.piyek.core.auth.data.local.db.toDomainModel
+import com.cryptic.piyek.core.auth.data.local.db.toPublicDomain
 import com.cryptic.piyek.core.auth.data.local.token.TokenStorage
 import com.cryptic.piyek.core.auth.data.remote.OAuthApiService
 import com.cryptic.piyek.core.auth.data.remote.toDomain
 import com.cryptic.piyek.core.network.NetworkResult
 import com.cryptic.piyek.core.tink.TinkMethod
 import com.cryptic.piyek.core.auth.domain.model.OauthUser
+import com.cryptic.piyek.core.auth.domain.model.OauthUserPublic
 import com.cryptic.piyek.core.auth.domain.repository.OAuthUserRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withLock
 
 class OAuthUserRepositoryImpl(
@@ -38,6 +46,16 @@ class OAuthUserRepositoryImpl(
         dao.insertUser(entity)
     }
 
+    override fun observeActiveAccountId(): Flow<Long?> {
+        return dataStore.data
+            .map { prefs -> prefs[ACTIVE_USER_ACCOUNT] }
+            .distinctUntilChanged()
+    }
+    override suspend fun removeActiveAccount() {
+        dataStore.edit { preferences ->
+            preferences.remove(ACTIVE_USER_ACCOUNT)
+        }
+    }
     override suspend fun getUser(id: Long): OauthUser? {
         return dao.getUserById(id)?.toDomainModel()
     }
@@ -72,6 +90,34 @@ class OAuthUserRepositoryImpl(
                 prefs.remove(CODE_VERIFIER)
             }
         }
+    }
+
+    override suspend fun getFirstAccountId(): Long {
+        return dao.getFirstAccountId()
+    }
+
+    override suspend fun getTotalAccountCount(): Int {
+        return dao.countAllAccount()
+    }
+
+    override fun getAllAccountVisualInfo(): Flow<List<OauthUserPublic>> {
+        return dao.getAllAccount().map { users ->
+            users.map { it.toPublicDomain() }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeActiveAccount(): Flow<OauthUserPublic?> {
+        return dataStore.data
+            .map { prefs -> prefs[ACTIVE_USER_ACCOUNT] }
+            .distinctUntilChanged()
+            .flatMapLatest { id ->
+                if (id != null) {
+                    dao.observeUserById(id).map { it?.toPublicDomain() }
+                } else {
+                    flowOf(null)
+                }
+            }
     }
 
     override suspend fun getRefreshTokenForActiveAcc(): Result<String> {

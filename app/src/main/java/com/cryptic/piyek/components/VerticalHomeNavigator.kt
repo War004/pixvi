@@ -60,7 +60,7 @@ fun VerticalHomeNavigator(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(34.dp))
-            .background(Color.LightGray)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(horizontal = 5.dp)
     ) {
         // Active indicator pill placed in the layer behind the icons

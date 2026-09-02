@@ -1,6 +1,6 @@
 package com.cryptic.piyek.feature.home.presentation
 
-import com.cryptic.piyek.core.auth.domain.model.OauthUser
+import com.cryptic.piyek.core.auth.domain.model.OauthUserPublic
 import com.cryptic.piyek.core.auth.domain.repository.OAuthUserRepository
 import com.cryptic.piyek.core.content.data.model.Artwork
 import com.cryptic.piyek.core.content.data.model.ArtworkContentList
@@ -8,8 +8,6 @@ import com.cryptic.piyek.core.content.data.model.RecommendationNonNovelPara
 import com.cryptic.piyek.core.content.data.model.createMockArtwork
 import com.cryptic.piyek.core.content.domain.repo.CoreContentApiRepo
 import com.cryptic.piyek.util.MainDispatcherExtension
-import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,6 +34,7 @@ class HomeViewModelTest {
     val mainDispatcherExtension = MainDispatcherExtension(testDispatcher)
 
     private val contentListFlow = MutableStateFlow<ArtworkContentList?>(null)
+    private val activeAccountFlow = MutableStateFlow<OauthUserPublic?>(null)
 
     private val iLLustRepo = mockk<CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList>>(relaxed = true)
     private val oAuthUserRepository = mockk<OAuthUserRepository>(relaxed = true)
@@ -44,15 +43,14 @@ class HomeViewModelTest {
     @BeforeEach
     fun setUp() {
         every { iLLustRepo.contentList } returns contentListFlow
+        every { oAuthUserRepository.observeActiveAccount() } returns activeAccountFlow
     }
 
     private fun createViewModel(
-        accountId: Long = activeAccountId,
         userRepo: OAuthUserRepository = oAuthUserRepository
     ): HomeViewModel {
         return HomeViewModel(
             iLLustRepo = iLLustRepo,
-            activeAccountId = accountId,
             oAuthUserRepository = userRepo,
             ioDispatcher = testDispatcher
         )
@@ -69,24 +67,34 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `initial state contains activeAccountId in currentAccount`() = runTest(testDispatcher) {
+    fun `initial state contains empty currentAccount when no active account emitted`() = runTest(testDispatcher) {
         val viewModel = createViewModel()
-        assertEquals(activeAccountId, viewModel.uiState.value.currentAccount.accountId)
+        assertEquals(0L, viewModel.uiState.value.currentAccount.accountId)
         assertFalse(viewModel.uiState.value.isSearchActive)
     }
 
     @Test
     fun `changeUiMode updates uiMode to Manga`() = runTest(testDispatcher) {
         val viewModel = createViewModel()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
         viewModel.action(HomeScreenAction.NewUiMode(NavOptions.Manga))
+        testScheduler.advanceUntilIdle()
         assertEquals(NavOptions.Manga, viewModel.uiState.value.currentDestination)
+        job.cancel()
     }
 
     @Test
     fun `changeUiMode updates uiMode to Novel`() = runTest(testDispatcher) {
         val viewModel = createViewModel()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
         viewModel.action(HomeScreenAction.NewUiMode(NavOptions.Novel))
+        testScheduler.advanceUntilIdle()
         assertEquals(NavOptions.Novel, viewModel.uiState.value.currentDestination)
+        job.cancel()
     }
 
     // ========================================================================
@@ -96,12 +104,18 @@ class HomeViewModelTest {
     @Test
     fun `SearchStatusChange action updates isSearchActive`() = runTest(testDispatcher) {
         val viewModel = createViewModel()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
 
         viewModel.action(HomeScreenAction.SearchStatusChange(true))
+        testScheduler.advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isSearchActive)
 
         viewModel.action(HomeScreenAction.SearchStatusChange(false))
+        testScheduler.advanceUntilIdle()
         assertFalse(viewModel.uiState.value.isSearchActive)
+        job.cancel()
     }
 
     // ========================================================================
@@ -109,55 +123,108 @@ class HomeViewModelTest {
     // ========================================================================
 
     @Test
-    fun `ActiveAccountDetails action updates currentAccount with user details from repo`() = runTest(testDispatcher) {
-        val mockUser = OauthUser(
+    fun `uiState reactively updates currentAccount when active account flow emits`() = runTest(testDispatcher) {
+        val mockUser = OauthUserPublic(
             id = activeAccountId,
             name = "Pixiv Artist",
             account = "pixiv_artist",
             mailAddress = "artist@pixiv.net",
-            bestProfilePicUrl = "https://example.com/avatar.jpg",
-            accessToken = null,
-            encryptedRefreshToken = "encrypted_token_123"
+            bestProfilePicUrl = "https://example.com/avatar.jpg"
         )
-        coEvery { oAuthUserRepository.getUser(activeAccountId) } returns mockUser
 
         val viewModel = createViewModel()
+        val collectedStates = mutableListOf<HomeScreenUiState>()
 
-        viewModel.action(HomeScreenAction.ActiveAccountDetails)
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect { collectedStates.add(it) }
+        }
+
         testScheduler.advanceUntilIdle()
 
-        val currentAccount = viewModel.uiState.value.currentAccount
+        // Act: Emit active user
+        activeAccountFlow.value = mockUser
+        testScheduler.advanceUntilIdle()
+
+        // Assert
+        val currentAccount = collectedStates.last().currentAccount
         assertEquals(activeAccountId, currentAccount.accountId)
         assertEquals("Pixiv Artist", currentAccount.accountName)
         assertEquals("artist@pixiv.net", currentAccount.accountEmail)
         assertEquals("https://example.com/avatar.jpg", currentAccount.profilePicBestUrl)
-        coVerify(exactly = 1) { oAuthUserRepository.getUser(activeAccountId) }
+
+        job.cancel()
     }
 
     @Test
-    fun `ActiveAccountDetails action does not query repo when account details are already populated`() = runTest(testDispatcher) {
-        val mockUser = OauthUser(
+    fun `ChangeAccount action calls saveActiveUser on repository`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+
+        viewModel.action(HomeScreenAction.ChangeAccount(2002L))
+        testScheduler.advanceUntilIdle()
+
+        io.mockk.coVerify(exactly = 1) { oAuthUserRepository.saveActiveUser(2002L) }
+    }
+
+    @Test
+    fun `LogOut with more than one account deletes user and switches to first remaining account`() = runTest(testDispatcher) {
+        val mockUser = OauthUserPublic(
             id = activeAccountId,
             name = "Pixiv Artist",
             account = "pixiv_artist",
             mailAddress = "artist@pixiv.net",
-            bestProfilePicUrl = "https://example.com/avatar.jpg",
-            accessToken = null,
-            encryptedRefreshToken = "encrypted_token_123"
+            bestProfilePicUrl = "https://example.com/avatar.jpg"
         )
-        coEvery { oAuthUserRepository.getUser(activeAccountId) } returns mockUser
-
         val viewModel = createViewModel()
-
-        // First action populates details
-        viewModel.action(HomeScreenAction.ActiveAccountDetails)
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+        activeAccountFlow.value = mockUser
         testScheduler.advanceUntilIdle()
 
-        // Second action should skip querying because details are not empty
-        viewModel.action(HomeScreenAction.ActiveAccountDetails)
+        io.mockk.coEvery { oAuthUserRepository.getTotalAccountCount() } returns 2
+        io.mockk.coEvery { oAuthUserRepository.getFirstAccountId() } returns 2002L
+
+        // Act
+        viewModel.action(HomeScreenAction.LogOut)
         testScheduler.advanceUntilIdle()
 
-        coVerify(exactly = 1) { oAuthUserRepository.getUser(activeAccountId) }
+        // Assert
+        io.mockk.coVerify(exactly = 1) { oAuthUserRepository.deleteUser(activeAccountId) }
+        io.mockk.coVerify(exactly = 1) { oAuthUserRepository.getFirstAccountId() }
+        io.mockk.coVerify(exactly = 1) { oAuthUserRepository.saveActiveUser(2002L) }
+        io.mockk.coVerify(exactly = 0) { oAuthUserRepository.removeActiveAccount() }
+
+        job.cancel()
+    }
+
+    @Test
+    fun `LogOut with only one account deletes user and removes active account preference`() = runTest(testDispatcher) {
+        val mockUser = OauthUserPublic(
+            id = activeAccountId,
+            name = "Pixiv Artist",
+            account = "pixiv_artist",
+            mailAddress = "artist@pixiv.net",
+            bestProfilePicUrl = "https://example.com/avatar.jpg"
+        )
+        val viewModel = createViewModel()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+        activeAccountFlow.value = mockUser
+        testScheduler.advanceUntilIdle()
+
+        io.mockk.coEvery { oAuthUserRepository.getTotalAccountCount() } returns 1
+
+        // Act
+        viewModel.action(HomeScreenAction.LogOut)
+        testScheduler.advanceUntilIdle()
+
+        // Assert
+        io.mockk.coVerify(exactly = 1) { oAuthUserRepository.deleteUser(activeAccountId) }
+        io.mockk.coVerify(exactly = 0) { oAuthUserRepository.getFirstAccountId() }
+        io.mockk.coVerify(exactly = 1) { oAuthUserRepository.removeActiveAccount() }
+
+        job.cancel()
     }
 
     // ========================================================================

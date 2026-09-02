@@ -12,6 +12,14 @@ data class OauthUser(
     val encryptedRefreshToken: String
 )
 
+data class OauthUserPublic(
+    val id: Long,
+    val name: String,
+    val account: String,
+    val mailAddress: String,
+    val bestProfilePicUrl: String
+)
+
 fun OauthUser.toEntity(encryptedRefreshToken: String): OAuthUserEntity {
     return OAuthUserEntity(
         id = this.id,

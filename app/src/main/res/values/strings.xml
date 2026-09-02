@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">PiYek</string>
+    <string name="empty_profile_pic">https://s.pximg.net/common/images/no_profile.png</string>
 </resources>

@@ -3,6 +3,7 @@ package com.cryptic.piyek.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.PersonAddAlt1
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material.icons.outlined.Download
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Monitor
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SwitchAccount
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +58,7 @@ fun NavigationMenu(
     onProfilePicClick: (String?) -> Unit = {},
     onManageAccountsClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
+    onAddAccount: () -> Unit = {},
     notificationNumber: Int = 0,
     currentAccount: CurrentAccount,
     content: @Composable (onOpenDrawer: () -> Unit) -> Unit
@@ -172,12 +176,20 @@ fun NavigationMenu(
                                 toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 toolbarContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
-                            shape = CircleShape
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp)
                         ) {
                             IconButton(onClick = onManageAccountsClick) {
                                 Icon(
-                                    imageVector = Icons.Default.ManageAccounts,
-                                    contentDescription = "Manage Accounts"
+                                    imageVector = Icons.Outlined.SwitchAccount,
+                                    contentDescription = "Switch Account"
+                                )
+                            }
+
+                            IconButton(onClick = onAddAccount) {
+                                Icon(
+                                    imageVector = Icons.Default.PersonAddAlt1,
+                                    contentDescription = "Add account"
                                 )
                             }
 

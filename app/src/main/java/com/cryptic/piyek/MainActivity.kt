@@ -8,6 +8,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -59,70 +64,78 @@ class MainActivity : ComponentActivity() {
 
             PiYekTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    when (val state = authState) {
-                        is AppAuthState.Loading -> {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(innerPadding),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator()
+                    AnimatedContent(
+                        targetState = authState,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(400)) togetherWith fadeOut(animationSpec = tween(400))
+                        },
+                        label = "AuthStateTransition",
+                        modifier = Modifier.fillMaxSize()
+                    ) { state ->
+                        when (state) {
+                            is AppAuthState.Loading -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(innerPadding),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
                             }
-                        }
-                        is AppAuthState.Unauthenticated -> {
-                            val onBoardingVIewModel: OnboardingViewModel by viewModels(
-                                factoryProducer = {
-                                    viewModelFactory {
-                                        initializer {
-                                            OnboardingViewModel(
-                                                oAuthUserRepo = app.container.oAuthUserRepository,
-                                                onboardingManager = app.container.onBoardingManager,
-                                                walkThroughRepo = app.container.walkthroughRepo
-                                            )
+                            is AppAuthState.Unauthenticated -> {
+                                val onBoardingVIewModel: OnboardingViewModel by viewModels(
+                                    factoryProducer = {
+                                        viewModelFactory {
+                                            initializer {
+                                                OnboardingViewModel(
+                                                    oAuthUserRepo = app.container.oAuthUserRepository,
+                                                    onboardingManager = app.container.onBoardingManager,
+                                                    walkThroughRepo = app.container.walkthroughRepo
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                            )
-                            OnboardingScreen(
-                                innerPadding = innerPadding,
-                                onboardingViewModel = onBoardingVIewModel,
-                                colorExtractor = app.container.dominantColorInPartsExtractor
-                            )
-                        }
-                        is AppAuthState.Authenticated -> {
-                            val homeVIewModel: HomeViewModel by viewModels(
-                                factoryProducer = {
-                                    viewModelFactory {
-                                        initializer {
-                                            HomeViewModel(
-                                                iLLustRepo = app.container.iLLustRepo,
-                                                activeAccountId = state.accountId,
-                                                oAuthUserRepository = app.container.oAuthUserRepository
-                                            )
+                                )
+                                OnboardingScreen(
+                                    innerPadding = innerPadding,
+                                    onboardingViewModel = onBoardingVIewModel,
+                                    colorExtractor = app.container.dominantColorInPartsExtractor
+                                )
+                            }
+                            is AppAuthState.Authenticated -> {
+                                val homeVIewModel: HomeViewModel by viewModels(
+                                    factoryProducer = {
+                                        viewModelFactory {
+                                            initializer {
+                                                HomeViewModel(
+                                                    iLLustRepo = app.container.iLLustRepo,
+                                                    oAuthUserRepository = app.container.oAuthUserRepository
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                            )
-                            val homeILLustVIewModel: HomeILLustViewModel by viewModels(
-                                factoryProducer = {
-                                    viewModelFactory {
-                                        initializer {
-                                            HomeILLustViewModel(
-                                                iLLustRepo = app.container.iLLustRepo
-                                            )
+                                )
+                                val homeILLustVIewModel: HomeILLustViewModel by viewModels(
+                                    factoryProducer = {
+                                        viewModelFactory {
+                                            initializer {
+                                                HomeILLustViewModel(
+                                                    iLLustRepo = app.container.iLLustRepo
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                            )
-                            HomeRoute(
-                                homeViewModel = homeVIewModel,
-                                iLLustHomeScreen = {
-                                    HomeILLustScreen(
-                                        homeILLustVIewModel
-                                    )
-                                },
-                            )
+                                )
+                                HomeRoute(
+                                    homeViewModel = homeVIewModel,
+                                    iLLustHomeScreen = {
+                                        HomeILLustScreen(
+                                            homeILLustVIewModel
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }

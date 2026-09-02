@@ -27,6 +27,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -425,5 +426,28 @@ class OAuthUserRepositoryImplTest {
         // Assert
         assertTrue(result.isFailure)
         assertEquals(networkException, result.exceptionOrNull())
+    }
+
+    @Test
+    fun `getAllAccountVisualInfo delegates to dao and returns flow of mapped public accounts`() = runTest {
+        // Arrange
+        every { dao.getAllAccount() } returns flowOf(listOf(testEntity))
+
+        // Act
+        val resultFlow = repository.getAllAccountVisualInfo()
+
+        // Assert
+        val emittedList = resultFlow.first()
+        val expected = listOf(
+            com.cryptic.piyek.core.auth.domain.model.OauthUserPublic(
+                id = testEntity.id,
+                name = testEntity.name,
+                account = testEntity.account,
+                mailAddress = testEntity.mailAddress,
+                bestProfilePicUrl = testEntity.bestProfilePicUrl
+            )
+        )
+        assertEquals(expected, emittedList)
+        io.mockk.verify(exactly = 1) { dao.getAllAccount() }
     }
 }

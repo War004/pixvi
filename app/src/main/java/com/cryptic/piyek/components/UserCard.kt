@@ -1,5 +1,6 @@
 package com.cryptic.piyek.components
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,12 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.cryptic.piyek.R
 
 @Composable
 fun UserCard(
@@ -45,16 +48,16 @@ fun UserCard(
 ) {
     ElevatedCard(
         modifier = modifier
-            .fillMaxWidth()
-            .clickable { onCardClick(accountId) },
+            .fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = 2.dp,
-            pressedElevation = 4.dp
-        )
+            pressedElevation = 6.dp
+        ),
+        onClick = {onCardClick(accountId) }
     ) {
         Row(
             modifier = Modifier
@@ -68,7 +71,14 @@ fun UserCard(
                 onClick = { onProfilePicClick(accountProfilePicBestLink) },
                 modifier = Modifier.size(52.dp)
             ) {
-                if (!accountProfilePicBestLink.isNullOrEmpty()) {
+                if (accountProfilePicBestLink.isNullOrEmpty() || accountProfilePicBestLink == stringResource(R.string.empty_profile_pic)) {
+                    Icon(
+                        imageVector = Icons.Outlined.AccountCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(52.dp),
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                } else {
                     AsyncImage(
                         model = accountProfilePicBestLink,
                         contentDescription = null,
@@ -76,13 +86,6 @@ fun UserCard(
                         modifier = Modifier
                             .size(52.dp)
                             .clip(CircleShape)
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.AccountCircle,
-                        contentDescription = null,
-                        modifier = Modifier.size(52.dp),
-                        tint = MaterialTheme.colorScheme.outline
                     )
                 }
             }

@@ -16,7 +16,8 @@ data class Artwork(
     val isBookmarked: Boolean,
     val isMuted: Boolean,
     val pageCount: Int,
-    //add request later
+    val height: Int,
+    val width: Int,
     val restrict: Int,
     val restrictionAttributes: List<String>,
     val sanityLevel: Int,
@@ -45,6 +46,13 @@ data class User(
     val userProfile: String,
     val userProfileImageUrlHighest: String
 )
+
+enum class QualityTier {
+    ORIGINAL,
+    HIGH,
+    MEDIUM,
+    SQUARE
+}
 
 data class ImageQuality(
     val original: String,

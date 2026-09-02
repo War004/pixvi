@@ -27,17 +27,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.memory.MemoryCache
 import com.cryptic.piyek.core.content.data.model.Artwork
 import com.cryptic.piyek.core.content.data.model.ImageQuality
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Default aspect ratio when no specific dimensions are available. */
-private const val DEFAULT_ASPECT_RATIO = 3f / 4f
-
-// ---------------------------------------------------------------------------
-// ArtworkFeedItem — single feed entry that supports multi-page artwork
-// ---------------------------------------------------------------------------
+import com.cryptic.piyek.core.content.data.model.QualityTier
 
 /**
  * Displays a single artwork entry in the vertical feed.
@@ -46,15 +36,17 @@ private const val DEFAULT_ASPECT_RATIO = 3f / 4f
  * - **Multi-page artwork**: wraps pages in a [HorizontalPager] with a
  *   [CircularPageProgressIndicator] overlay in the top-end corner.
  *
- * Aspect ratio defaults to [DEFAULT_ASPECT_RATIO] since the domain model
- * does not carry dimension metadata.
+ * Aspect ratio is decided based on the height and width that are the properties in the domain layer
+ * If the ratio is between 4:5(0.80) and 16:9(1.78) we would use the height and width to determine the box shape w/h for vertical screen
+ * If the image exceed the values then the ratio would be clamped towards the end that the images goes to
  *
- * @param artwork     The artwork to render.
- * @param isFocused   Whether this item is the "active" item closest to the
- *                    viewport center — used for a subtle highlight border.
- * @param onClick     Callback invoked on a regular tap.
- * @param onLongPress Callback invoked on a long-press, receiving the
- *                    raw image URL and the current page index.
+ * @param artwork        The artwork to render.
+ * @param isFocused      Whether this item is the "active" item closest to the
+ *                       viewport center — used for a subtle highlight border.
+ * @param onClick        Callback invoked on a regular tap.
+ * @param onLongPress    Callback invoked on a long-press, receiving the
+ *                       raw image URL and the current page index.
+ * @param defaultQuality The preferred default image quality tier to load (defaults to [QualityTier.HIGH]).
  */
 @Composable
 fun ArtworkFeedItem(
@@ -62,6 +54,7 @@ fun ArtworkFeedItem(
     isFocused: Boolean,
     onClick: () -> Unit,
     onLongPress: (rawUrl: String, pageIndex: Int) -> Unit,
+    defaultQuality: QualityTier = QualityTier.HIGH,
 ) {
     val context = LocalPlatformContext.current
     val imageLoader = SingletonImageLoader.get(context)
@@ -69,6 +62,7 @@ fun ArtworkFeedItem(
 
     val isMultiPage = artwork.pageCount > 1
     val pageQualities = artwork.quality.all
+    val aspectRatio: Float = (artwork.width.toFloat() / artwork.height).coerceIn(0.80f, 1.78f)
 
     Column(modifier = Modifier.fillMaxWidth()) {
 
@@ -82,12 +76,12 @@ fun ArtworkFeedItem(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(DEFAULT_ASPECT_RATIO, matchHeightConstraintsFirst = false)
+                .aspectRatio(aspectRatio, matchHeightConstraintsFirst = false)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = {
                         val currentPage = pagerState?.currentPage ?: 0
-                        val url = getOptimalUrl(pageQualities[currentPage], memoryCache)
+                        val url = getOptimalUrl(pageQualities[currentPage], memoryCache, defaultQuality)
                         onLongPress(url, currentPage)
                     },
                 )
@@ -106,12 +100,14 @@ fun ArtworkFeedItem(
                     pagerState = pagerState!!,
                     memoryCache = memoryCache,
                     contentDescription = artwork.title,
+                    defaultQuality = defaultQuality,
                 )
             } else {
                 SinglePageContent(
                     quality = pageQualities.first(),
                     memoryCache = memoryCache,
                     contentDescription = artwork.title,
+                    defaultQuality = defaultQuality,
                 )
             }
         }
@@ -128,19 +124,20 @@ private fun MultiPageContent(
     pagerState: androidx.compose.foundation.pager.PagerState,
     memoryCache: MemoryCache?,
     contentDescription: String,
+    defaultQuality: QualityTier = QualityTier.HIGH,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
         ) { pageIndex ->
-            val url = remember(pageIndex) {
-                getOptimalUrl(pages[pageIndex], memoryCache)
+            val url = remember(pageIndex, defaultQuality) {
+                getOptimalUrl(pages[pageIndex], memoryCache, defaultQuality)
             }
             AsyncImage(
                 model = url,
                 contentDescription = contentDescription,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -160,12 +157,13 @@ private fun SinglePageContent(
     quality: ImageQuality,
     memoryCache: MemoryCache?,
     contentDescription: String,
+    defaultQuality: QualityTier = QualityTier.HIGH,
 ) {
-    val url = remember { getOptimalUrl(quality, memoryCache) }
+    val url = remember(quality, defaultQuality) { getOptimalUrl(quality, memoryCache, defaultQuality) }
     AsyncImage(
         model = url,
         contentDescription = contentDescription,
-        contentScale = ContentScale.Crop,
+        contentScale = ContentScale.Fit,
         modifier = Modifier.fillMaxSize(),
     )
 }
@@ -179,7 +177,7 @@ private fun SinglePageContent(
  *
  * Priority:
  * 1. If a higher-quality variant is already in the memory cache, use it.
- * 2. Otherwise fall back to **medium** quality (best balance for feed).
+ * 2. Otherwise fall back to [preferredQuality] (defaults to [QualityTier.HIGH]).
  *
  * This is intentionally **not** a composable so it can be unit-tested
  * without a Compose context.
@@ -187,12 +185,18 @@ private fun SinglePageContent(
 fun getOptimalUrl(
     quality: ImageQuality,
     memoryCache: MemoryCache?,
+    preferredQuality: QualityTier = QualityTier.HIGH,
 ): String {
     val originalKey = MemoryCache.Key(quality.original)
     val highKey = MemoryCache.Key(quality.high)
     return when {
         memoryCache?.get(originalKey) != null -> quality.original
         memoryCache?.get(highKey) != null -> quality.high
-        else -> quality.medium
+        else -> when (preferredQuality) {
+            QualityTier.ORIGINAL -> quality.original.ifEmpty { quality.high.ifEmpty { quality.medium } }
+            QualityTier.HIGH -> quality.high.ifEmpty { quality.medium }
+            QualityTier.MEDIUM -> quality.medium.ifEmpty { quality.square }
+            QualityTier.SQUARE -> quality.square.ifEmpty { quality.medium }
+        }
     }
 }

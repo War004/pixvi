@@ -58,8 +58,10 @@ fun createMockArtwork(
     title: String = ArtworkMockData.TITLES.random(),
     caption: String = ArtworkMockData.CAPTIONS.random(),
     user: User = createMockUser(),
-    type: ArtworkType = ArtworkType.values().random(),
+    type: ArtworkType = ArtworkType.entries.toTypedArray().random(),
     quality: ArtworkQuality = createMockArtworkQuality(),
+    height: Int = (1..2000).random(),
+    width: Int = (1..2000).random(),
     createDate: String = "2026-07-08T13:00:00Z",
     seasonalEffectAnimationUrls: String? = null,
     illustAiType: Int = 0,
@@ -103,7 +105,9 @@ fun createMockArtwork(
         totalViews = totalViews,
         visible = visible,
         xRestrict = xRestrict,
-        currentIndex = currentIndex
+        currentIndex = currentIndex,
+        width = width,
+        height = height
     )
 }
 

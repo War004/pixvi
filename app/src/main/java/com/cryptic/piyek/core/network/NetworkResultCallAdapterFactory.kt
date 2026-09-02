@@ -9,9 +9,18 @@ import java.lang.reflect.Type
 class NetworkResultCallAdapterFactory : CallAdapter.Factory() {
     override fun get(returnType: Type, annotations: Array<Annotation>, retrofit: Retrofit): CallAdapter<*, *>? {
         if (getRawType(returnType) != Call::class.java) return null
-        val callType = getParameterUpperBound(0, returnType as ParameterizedType)
+        check(returnType is ParameterizedType) {
+            "Call return type must be parameterized as Call<NetworkResult<Foo>>"
+        }
+
+        val callType = getParameterUpperBound(0, returnType)
         if (getRawType(callType) != NetworkResult::class.java) return null
-        val responseType = getParameterUpperBound(0, callType as ParameterizedType)
+        check(callType is ParameterizedType) {
+            "NetworkResult return type must be parameterized as NetworkResult<Foo>. " +
+            "If this occurs in release builds, ensure ProGuard retains generic signatures (-keepattributes Signature)."
+        }
+
+        val responseType = getParameterUpperBound(0, callType)
         return NetworkResultCallAdapter(responseType)
     }
 }

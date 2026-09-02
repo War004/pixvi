@@ -197,6 +197,8 @@ fun ArtworkResponse.toDomain(): Artwork {
             firstPage = imageQualities.first(),
             all = imageQualities
         ),
+        height = this.height,
+        width = this.width,
         createDate = this.createDate,
         seasonalEffectAnimationUrls = this.seasonalEffectAnimationUrls,
         illustAiType = this.illustAiType,

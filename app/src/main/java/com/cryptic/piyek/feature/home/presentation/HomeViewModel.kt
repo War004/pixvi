@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
@@ -25,20 +26,42 @@ import kotlinx.coroutines.launch
 
 class HomeViewModel(
     iLLustRepo: CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList>,
-    private val activeAccountId: Long,
     private val oAuthUserRepository: OAuthUserRepository,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
-    //others repo for the future
 ): ViewModel() {
 
-    private val _uiState = MutableStateFlow<HomeScreenUiState>(HomeScreenUiState(
-        textFiledState = TextFieldState(""),
-        isSearchActive = false,
-        currentAccount = CurrentAccount(accountId = activeAccountId)
-    ))
+    private val _searchState = MutableStateFlow(false)
+    private val _uiModeState: MutableStateFlow<NavOptions> = MutableStateFlow(NavOptions.ILLust)
+    val searchTextFieldState = TextFieldState("")
 
-    val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
-    val destinationWindows: List<NavOptions> = listOf(NavOptions.ILLust, NavOptions.Manga,NavOptions.Novel)
+    val uiState: StateFlow<HomeScreenUiState> = combine(
+        _searchState,
+        _uiModeState,
+        oAuthUserRepository.observeActiveAccount()
+    ) { isSearchActive, uiMode, activeUser ->
+        HomeScreenUiState(
+            textFiledState = searchTextFieldState,
+            isSearchActive = isSearchActive,
+            currentDestination = uiMode,
+            currentAccount = CurrentAccount(
+                accountId = activeUser?.id ?: 0L,
+                accountName = activeUser?.name,
+                accountEmail = activeUser?.mailAddress,
+                profilePicBestUrl = activeUser?.bestProfilePicUrl
+            )
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = HomeScreenUiState(
+            textFiledState = searchTextFieldState,
+            isSearchActive = false,
+            currentDestination = NavOptions.ILLust,
+            currentAccount = CurrentAccount(accountId = 0L)
+        )
+    )
+
+    val destinationWindows: List<NavOptions> = listOf(NavOptions.ILLust, NavOptions.Manga, NavOptions.Novel)
 
     val activeArtwork: StateFlow<Artwork?> = iLLustRepo.contentList
         .map { contentList ->
@@ -52,49 +75,42 @@ class HomeViewModel(
 
     fun action(action: HomeScreenAction){
         when(action){
-            is HomeScreenAction.SearchStatusChange -> {changeSearchStatus(action.newValue)}
-            is HomeScreenAction.NewUiMode -> {changeUiMode(action.newUIMode)}
-            is HomeScreenAction.ActiveAccountDetails -> { getCurrentAccountDetail()}
+            is HomeScreenAction.SearchStatusChange -> changeSearchStatus(action.newValue)
+            is HomeScreenAction.NewUiMode -> changeUiMode(action.newUIMode)
+            is HomeScreenAction.ActiveAccountDetails -> {}
+            is HomeScreenAction.LogOut -> logOut()
+            is HomeScreenAction.ChangeAccount -> changeActiveAccount(action.targetAccountId)
         }
     }
 
-    private fun getCurrentAccountDetail(){
-        val currentUiState = _uiState.value
+    private fun changeActiveAccount(targetAccountId: Long) {
+        viewModelScope.launch(ioDispatcher) {
+            oAuthUserRepository.saveActiveUser(targetAccountId)
+        }
+    }
 
-        if(currentUiState.currentAccount.accountId!=activeAccountId || currentUiState.currentAccount.isEmpty()){
-            viewModelScope.launch(ioDispatcher) {
-                try{
-                    val account = oAuthUserRepository.getUser(activeAccountId)
-                    if(account!=null){
-                        _uiState.update { currentState ->
-                            currentState.copy(
-                                currentAccount = currentState.currentAccount.copy(
-                                    profilePicBestUrl = account.bestProfilePicUrl,
-                                    accountName = account.name,
-                                    accountEmail = account.mailAddress
-                                )
-                            )
-                        }
-                    }
-                }
-                catch (e: Exception){
-                    Log.e("ACTIVE ACCOUNT","Something happened in the db layer")
-                }
+    private fun logOut() {
+        val currentAccountId = uiState.value.currentAccount.accountId
+        if (currentAccountId <= 0L) return
+
+        viewModelScope.launch(ioDispatcher) {
+            val accountCount = oAuthUserRepository.getTotalAccountCount()
+            if (accountCount > 1) {
+                oAuthUserRepository.deleteUser(currentAccountId)
+                val nextAccountId = oAuthUserRepository.getFirstAccountId()
+                oAuthUserRepository.saveActiveUser(nextAccountId)
+            } else {
+                oAuthUserRepository.deleteUser(currentAccountId)
+                oAuthUserRepository.removeActiveAccount()
             }
         }
     }
-    /*
-    Need to validate that the entries between the destinationWindow and avliable option in NavOptions are in sync.
-    */
+
     private fun changeUiMode(newUiMode: NavOptions){
-        _uiState.update {
-            it.copy(currentDestination = newUiMode)
-        }
+        _uiModeState.update { newUiMode }
     }
 
     private fun changeSearchStatus(isFocused: Boolean){
-        _uiState.update {
-            it.copy(isSearchActive = isFocused)
-        }
+        _searchState.update { isFocused }
     }
 }

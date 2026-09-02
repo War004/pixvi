@@ -3,6 +3,7 @@ package com.cryptic.piyek.core.auth.data.local.db
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.cryptic.piyek.core.auth.domain.model.OauthUser
+import com.cryptic.piyek.core.auth.domain.model.OauthUserPublic
 
 /*
 * We are only saving the values that are not going to change.
@@ -31,5 +32,15 @@ fun OAuthUserEntity.toDomainModel(): OauthUser {
         bestProfilePicUrl = this.bestProfilePicUrl,
         accessToken = null,
         encryptedRefreshToken = this.encryptedRefreshToken,
+    )
+}
+
+fun OAuthUserEntity.toPublicDomain(): OauthUserPublic {
+    return OauthUserPublic(
+        id = this.id,
+        name = this.name,
+        account = this.account,
+        mailAddress = this.mailAddress,
+        bestProfilePicUrl = this.bestProfilePicUrl,
     )
 }

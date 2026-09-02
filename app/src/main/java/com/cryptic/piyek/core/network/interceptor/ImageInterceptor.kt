@@ -13,7 +13,7 @@ class ImageInterceptor(
         val requestBuilder = originalRequest.newBuilder()
             .header("Accept-Encoding","gzip")
             .header("Connection","Keep-Alive")
-            .header("Host","i.pximg.net")
+            //.header("Host","i.pximg.net")
             .header("User-Agent", appConfig.getUserAgent())
             .header("Referer", appConfig.getRefererUrl())
 
