@@ -46,45 +46,46 @@ class AuthInterceptor(
             return null
         }
 
+        val requestToken = response.request.header("Authorization")
+            ?.removePrefix("Bearer ")
+
+        val currentToken = tokenStorage.getAccessToken()
+        if (!currentToken.isNullOrBlank() && currentToken != requestToken) {
+            return response.request.newBuilder()
+                .header("Authorization", "Bearer $currentToken")
+                .build()
+        }
+
         return runBlocking {
             tokenStorage.writeMutex.withLock {
                 val currentInMemoryToken = tokenStorage.getAccessToken()
 
-                if (currentInMemoryToken.isNullOrBlank()) {
-                    return@runBlocking null
-                }
-
-                val requestToken = response.request.header("Authorization")
-                    ?.removePrefix("Bearer ")
-
-                if (currentInMemoryToken != requestToken) {
+                if (!currentInMemoryToken.isNullOrBlank() && currentInMemoryToken != requestToken) {
                     return@runBlocking response.request.newBuilder()
                         .header("Authorization", "Bearer $currentInMemoryToken")
                         .build()
                 }
 
                 val refreshTokenResult = oAuthUserRepository.getRefreshTokenForActiveAcc()
+                if (refreshTokenResult.isFailure) {
+                    return@runBlocking null
+                }
 
-                if (refreshTokenResult.isSuccess) {
-                    val actualRefreshToken = refreshTokenResult.getOrThrow()
+                val actualRefreshToken = refreshTokenResult.getOrThrow()
 
-                    val accessToken = oAuthUserRepository.exchangeCodeForToken(
-                        grantType = "refresh_token",
-                        clientId = appConfig.getClientId(),
-                        clientSecret = appConfig.getClientSecret(),
-                        includePolicy = false,
-                        refreshToken = actualRefreshToken
-                    )
+                val refreshResult = oAuthUserRepository.exchangeCodeForToken(
+                    grantType = "refresh_token",
+                    clientId = appConfig.getClientId(),
+                    clientSecret = appConfig.getClientSecret(),
+                    includePolicy = false,
+                    refreshToken = actualRefreshToken
+                )
 
-                    if (accessToken.isSuccess) {
-                        val newToken = accessToken.getOrThrow()
-
-                        return@runBlocking response.request.newBuilder()
-                            .header("Authorization", "Bearer $newToken")
-                            .build()
-                    } else {
-                        return@runBlocking null
-                    }
+                if (refreshResult.isSuccess) {
+                    val newAccessToken = tokenStorage.getAccessToken() ?: return@runBlocking null
+                    return@runBlocking response.request.newBuilder()
+                        .header("Authorization", "Bearer $newAccessToken")
+                        .build()
                 } else {
                     return@runBlocking null
                 }
