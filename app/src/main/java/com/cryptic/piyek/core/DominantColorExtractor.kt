@@ -120,9 +120,13 @@ class DominantColorExtractor {
                     if (maxScore < 0) return@withLock Color.BLACK
 
                     // 5. Unpack the winning index back into a standard 32-bit ARGB color
-                    val finalR = ((dominantIndex shr 10) and 0x1F) shl 3
-                    val finalG = ((dominantIndex shr 5) and 0x1F) shl 3
-                    val finalB = (dominantIndex and 0x1F) shl 3
+                    val r5 = (dominantIndex shr 10) and 0x1F
+                    val g5 = (dominantIndex shr 5) and 0x1F
+                    val b5 = dominantIndex and 0x1F
+
+                    val finalR = (r5 shl 3) or (r5 shr 2)
+                    val finalG = (g5 shl 3) or (g5 shr 2)
+                    val finalB = (b5 shl 3) or (b5 shr 2)
 
                     Color.rgb(finalR, finalG, finalB)
 

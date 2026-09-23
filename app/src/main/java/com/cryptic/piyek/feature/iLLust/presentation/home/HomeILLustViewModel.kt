@@ -18,42 +18,22 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// ---------------------------------------------------------------------------
-// Actions – sealed interface defining every possible user/system intent
-// ---------------------------------------------------------------------------
+import com.cryptic.piyek.core.content.presentation.ArtworkFeedAction
+import com.cryptic.piyek.core.content.presentation.ScreenStatus as CoreScreenStatus
 
-sealed interface HomeILLustAction {
-
-    /** Initial data load / retry after error. */
-    data object Retry : HomeILLustAction
-
-    /** Triggered when the user scrolls near the end of the feed. */
-    data object LoadMore : HomeILLustAction
-
-    /** Scroll-driven: the artwork closest to the viewport center changed. */
-    data class UpdateFocusedIndex(val index: Int) : HomeILLustAction
-
-    /** Toggle bookmark state for a given artwork. */
-    data class ToggleBookmark(
-        val postId: Long,
-        val isCurrentlyBookmarked: Boolean,
-        val restrict: BookmarkRestrict? = null,
-    ) : HomeILLustAction
-
-    /** Navigate to the full artwork detail view. */
-    data class NavigateToArtwork(val artworkId: Long) : HomeILLustAction
-
-    /** Navigate to the user's profile. */
-    data class NavigateToUser(val userId: Int) : HomeILLustAction
-
-    /** Navigate to the full ranking list screen. */
-    data object NavigateToRankingList : HomeILLustAction
-
-    /** Long-press on an artwork (e.g. to show a context menu). */
-    data class LongPressArtwork(
-        val artwork: Artwork,
-        val pageIndex: Int,
-    ) : HomeILLustAction
+object HomeILLustAction {
+    val Retry: ArtworkFeedAction = ArtworkFeedAction.Retry
+    val LoadMore: ArtworkFeedAction = ArtworkFeedAction.LoadMore
+    fun UpdateFocusedIndex(index: Int): ArtworkFeedAction = ArtworkFeedAction.UpdateFocusedIndex(index)
+    fun ToggleBookmark(
+        postId: Long,
+        isCurrentlyBookmarked: Boolean,
+        restrict: BookmarkRestrict? = null,
+    ): ArtworkFeedAction = ArtworkFeedAction.ToggleBookmark(postId, isCurrentlyBookmarked, restrict)
+    fun NavigateToArtwork(artworkId: Long): ArtworkFeedAction = ArtworkFeedAction.NavigateToArtwork(artworkId)
+    fun NavigateToUser(userId: Int): ArtworkFeedAction = ArtworkFeedAction.NavigateToUser(userId)
+    val NavigateToRankingList: ArtworkFeedAction = ArtworkFeedAction.NavigateToRankingList
+    fun LongPressArtwork(artwork: Artwork, pageIndex: Int): ArtworkFeedAction = ArtworkFeedAction.LongPressArtwork(artwork, pageIndex)
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +55,7 @@ class HomeILLustViewModel(
         when {
             contentList == null -> {
                 HomeILLustUiState(
-                    status = ScreenStatus.Loading,
+                    status = if (error != null) ScreenStatus.Idle else ScreenStatus.Loading,
                     errorMessage = error,
                 )
             }
@@ -105,21 +85,21 @@ class HomeILLustViewModel(
     // Single public entry-point
     // ---------------------------------------------------------------------------
 
-    fun onAction(action: HomeILLustAction) {
+    fun onAction(action: ArtworkFeedAction) {
         when (action) {
-            is HomeILLustAction.Retry -> getRecommendation()
+            ArtworkFeedAction.Retry -> getRecommendation()
 
-            is HomeILLustAction.LoadMore -> {
+            ArtworkFeedAction.LoadMore -> {
                 if (!_isLoadingMore.value) {
                     getMoreRecommendation()
                 }
             }
 
-            is HomeILLustAction.UpdateFocusedIndex -> {
+            is ArtworkFeedAction.UpdateFocusedIndex -> {
                 iLLustRepo.changeFocusedIndex(action.index)
             }
 
-            is HomeILLustAction.ToggleBookmark -> {
+            is ArtworkFeedAction.ToggleBookmark -> {
                 onBookmarkClick(
                     postId = action.postId,
                     isCurrentlyBookmarked = action.isCurrentlyBookmarked,
@@ -128,10 +108,10 @@ class HomeILLustViewModel(
             }
 
             // ---- Defined, not yet implemented ----
-            is HomeILLustAction.NavigateToArtwork -> { /* TODO */ }
-            is HomeILLustAction.NavigateToUser -> { /* TODO */ }
-            is HomeILLustAction.NavigateToRankingList -> { /* TODO */ }
-            is HomeILLustAction.LongPressArtwork -> { /* TODO */ }
+            is ArtworkFeedAction.NavigateToArtwork -> { /* TODO */ }
+            is ArtworkFeedAction.NavigateToUser -> { /* TODO */ }
+            ArtworkFeedAction.NavigateToRankingList -> { /* TODO */ }
+            is ArtworkFeedAction.LongPressArtwork -> { /* TODO */ }
         }
     }
 

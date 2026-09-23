@@ -41,6 +41,7 @@ android {
         compose = true
     }
     testOptions {
+        unitTests.isReturnDefaultValues = true
         unitTests.all { testTask ->
             testTask.useJUnitPlatform()
         }

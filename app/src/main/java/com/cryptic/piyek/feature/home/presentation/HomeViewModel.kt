@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 
 class HomeViewModel(
     iLLustRepo: CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList>,
+    mangaRepo: CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList>,
     private val oAuthUserRepository: OAuthUserRepository,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ): ViewModel() {
@@ -72,6 +73,32 @@ class HomeViewModel(
             started = SharingStarted.WhileSubscribed(5000L),
             initialValue = null
         )
+
+    val activeManga: StateFlow<Artwork?> = mangaRepo.contentList
+        .map { contentList ->
+            contentList?.artworkList?.getOrNull(contentList.focusedIndex)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = null
+        )
+
+    val currentActiveArtwork: StateFlow<Artwork?> = combine(
+        _uiModeState,
+        activeArtwork,
+        activeManga
+    ) { mode, illust, manga ->
+        when (mode) {
+            NavOptions.ILLust -> illust
+            NavOptions.Manga -> manga
+            NavOptions.Novel -> null
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = null
+    )
 
     fun action(action: HomeScreenAction){
         when(action){

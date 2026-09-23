@@ -71,7 +71,7 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import com.cryptic.piyek.components.ContentBlink
-import com.cryptic.piyek.core.DominantColorInPartsExtractor
+import com.cryptic.piyek.core.DominantColorExtractor
 import com.cryptic.piyek.core.theme.getContrastTextColor
 import com.cryptic.piyek.core.theme.getTonalButtonColor
 import com.cryptic.piyek.core.content.data.model.Artwork
@@ -81,7 +81,7 @@ import kotlinx.coroutines.launch
 fun OnboardingScreen(
     innerPadding: PaddingValues,
     onboardingViewModel: OnboardingViewModel,
-    colorExtractor: DominantColorInPartsExtractor
+    colorExtractor: DominantColorExtractor
 ) {
     val currentArtwork by onboardingViewModel.currentArtwork.collectAsStateWithLifecycle()
     val defaultBg = MaterialTheme.colorScheme.background

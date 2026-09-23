@@ -1,6 +1,5 @@
 package com.cryptic.piyek.core.content.illust.data.remote
 
-import com.cryptic.piyek.core.CResponse
 import com.cryptic.piyek.core.content.data.remote.ILLustMangaRecommendationResponse
 import com.cryptic.piyek.core.network.NetworkResult
 import retrofit2.http.Field

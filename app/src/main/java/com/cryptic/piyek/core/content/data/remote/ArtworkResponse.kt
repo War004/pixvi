@@ -213,7 +213,7 @@ fun ArtworkResponse.toDomain(): Artwork {
         tags = tags,
         tools = this.tools,
         totalBookmarks = this.totalBookmarks,
-        totalViews = this.totalBookmarks,
+        totalViews = this.totalView,
         visible = this.visible,
         xRestrict = this.xRestrict,
     )

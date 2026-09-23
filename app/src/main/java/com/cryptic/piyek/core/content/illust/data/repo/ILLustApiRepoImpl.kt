@@ -45,7 +45,7 @@ class ILLustApiRepoImpl(
                     }
                     val rankingArtworkList = response.data.rankingArtwork.map { it.toDomain() }
 
-                    val nextUrl = response.data.nextUrl
+                    val nextUrl = response.data.nextUrl ?: ""
 
                     _contentList.update {
                         ArtworkContentList(
@@ -100,7 +100,7 @@ class ILLustApiRepoImpl(
                             artworkList = (existingList + data).distinctBy { item: Artwork ->
                                 item.id
                             },
-                            nextUrl = networkResponse.data.nextUrl
+                            nextUrl = networkResponse.data.nextUrl ?: ""
                         )
                     }
                     CResponse.Success(Unit)

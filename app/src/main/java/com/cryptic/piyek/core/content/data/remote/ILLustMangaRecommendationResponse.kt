@@ -6,11 +6,11 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ILLustMangaRecommendationResponse(
     @SerialName("illusts")
-    val artwork: List<ArtworkResponse>,
+    val artwork: List<ArtworkResponse> = emptyList(),
     @SerialName("contest_exists")
-    val contestExists: Boolean,
+    val contestExists: Boolean = false,
     @SerialName("next_url")
-    val nextUrl: String, //do null
+    val nextUrl: String? = null,
     @SerialName("privacy_policy")
     val privacyPolicy: PrivacyPolicy? = null,
     @SerialName("ranking_illusts")

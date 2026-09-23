@@ -68,13 +68,13 @@ import kotlin.time.Duration.Companion.milliseconds
 fun HomeRoute(
     homeViewModel: HomeViewModel,
     iLLustHomeScreen: @Composable () -> Unit,
+    mangaHomeScreen: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    //mangaHomeVIewModel: @Composable () -> Unit,
     //novelHomeViewModel: @Composable () -> Unit,
     //backStack: Any,
 ) {
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
-    val activeArtwork by homeViewModel.activeArtwork.collectAsStateWithLifecycle()
+    val activeArtwork by homeViewModel.currentActiveArtwork.collectAsStateWithLifecycle()
 
     HomeScreen(
         uiState = uiState,
@@ -82,6 +82,7 @@ fun HomeRoute(
         destinationWindows = homeViewModel.destinationWindows,
         onAction = homeViewModel::action,
         iLLustHomeScreen = iLLustHomeScreen,
+        mangaHomeScreen = mangaHomeScreen,
         modifier = modifier
     )
 }
@@ -94,6 +95,7 @@ fun HomeScreen(
     destinationWindows: List<NavOptions>,
     onAction: (HomeScreenAction) -> Unit,
     iLLustHomeScreen: @Composable () -> Unit,
+    mangaHomeScreen: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val saveableStateHolder = rememberSaveableStateHolder()
@@ -178,7 +180,8 @@ fun HomeScreen(
                         currentDestination = uiState.currentDestination,
                         activeArtwork = activeArtwork,
                         saveableStateHolder = saveableStateHolder,
-                        iLLustHomeScreen = iLLustHomeScreen
+                        iLLustHomeScreen = iLLustHomeScreen,
+                        mangaHomeScreen = mangaHomeScreen
                     )
                 }
 
@@ -270,6 +273,7 @@ private fun HomeDestinationHost(
     activeArtwork: Artwork?,
     saveableStateHolder: SaveableStateHolder,
     iLLustHomeScreen: @Composable () -> Unit,
+    mangaHomeScreen: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -280,7 +284,7 @@ private fun HomeDestinationHost(
                 }
                 else -> {
                     when (currentDestination) {
-                        is NavOptions.Manga -> Text("This should be the manga screen!")
+                        is NavOptions.Manga -> mangaHomeScreen()
                         is NavOptions.ILLust -> iLLustHomeScreen()
                     }
                     FloatingImageInfoToolbar(

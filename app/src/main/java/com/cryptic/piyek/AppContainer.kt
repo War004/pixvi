@@ -29,6 +29,8 @@ import com.cryptic.piyek.core.content.data.model.RecommendationNonNovelPara
 import com.cryptic.piyek.core.content.domain.repo.CoreContentApiRepo
 import com.cryptic.piyek.core.content.illust.data.remote.ILLustApiService
 import com.cryptic.piyek.core.content.illust.data.repo.ILLustApiRepoImpl
+import com.cryptic.piyek.core.content.manga.data.remote.MangaApiService
+import com.cryptic.piyek.core.content.manga.data.repo.MangaApiRepoImpl
 import com.cryptic.piyek.feature.onboarding.data.remote.PixivWalkThroughApiService
 import com.cryptic.piyek.feature.onboarding.data.repo.WalkthroughRepoImpl
 import com.cryptic.piyek.feature.onboarding.domain.repo.WalkthroughRepo
@@ -166,6 +168,14 @@ class AppContainer(
 
     val iLLustRepo: CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList> by lazy {
         ILLustApiRepoImpl(iLLustApi)
+    }
+
+    val mangaApi: MangaApiService by lazy {
+        piyekRetrofit.create(MangaApiService::class.java)
+    }
+
+    val mangaRepo: CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList> by lazy {
+        MangaApiRepoImpl(mangaApi)
     }
 
     val walkthroughRepo: WalkthroughRepo by lazy {

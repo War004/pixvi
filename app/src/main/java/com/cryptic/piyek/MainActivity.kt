@@ -36,6 +36,8 @@ import com.cryptic.piyek.feature.home.presentation.HomeViewModel
 import com.cryptic.piyek.feature.iLLust.presentation.home.HomeILLustScreen
 import com.cryptic.piyek.feature.iLLust.presentation.home.HomeILLustUiState
 import com.cryptic.piyek.feature.iLLust.presentation.home.HomeILLustViewModel
+import com.cryptic.piyek.feature.manga.presentation.HomeMangaScreen
+import com.cryptic.piyek.feature.manga.presentation.HomeMangaViewModel
 import com.cryptic.piyek.feature.onboarding.presentation.OnboardingScreen
 import com.cryptic.piyek.feature.onboarding.presentation.OnboardingViewModel
 import com.cryptic.piyek.ui.theme.PiYekTheme
@@ -100,7 +102,7 @@ class MainActivity : ComponentActivity() {
                                 OnboardingScreen(
                                     innerPadding = innerPadding,
                                     onboardingViewModel = onBoardingVIewModel,
-                                    colorExtractor = app.container.dominantColorInPartsExtractor
+                                    colorExtractor = app.container.dominantColorExtractor
                                 )
                             }
                             is AppAuthState.Authenticated -> {
@@ -110,6 +112,7 @@ class MainActivity : ComponentActivity() {
                                             initializer {
                                                 HomeViewModel(
                                                     iLLustRepo = app.container.iLLustRepo,
+                                                    mangaRepo = app.container.mangaRepo,
                                                     oAuthUserRepository = app.container.oAuthUserRepository
                                                 )
                                             }
@@ -127,6 +130,17 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 )
+                                val homeMangaViewModel: HomeMangaViewModel by viewModels(
+                                    factoryProducer = {
+                                        viewModelFactory {
+                                            initializer {
+                                                HomeMangaViewModel(
+                                                    mangaRepo = app.container.mangaRepo
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
                                 HomeRoute(
                                     homeViewModel = homeVIewModel,
                                     iLLustHomeScreen = {
@@ -134,6 +148,11 @@ class MainActivity : ComponentActivity() {
                                             homeILLustVIewModel
                                         )
                                     },
+                                    mangaHomeScreen = {
+                                        HomeMangaScreen(
+                                            homeMangaViewModel
+                                        )
+                                    }
                                 )
                             }
                         }

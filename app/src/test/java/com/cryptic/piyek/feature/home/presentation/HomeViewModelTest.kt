@@ -34,15 +34,18 @@ class HomeViewModelTest {
     val mainDispatcherExtension = MainDispatcherExtension(testDispatcher)
 
     private val contentListFlow = MutableStateFlow<ArtworkContentList?>(null)
+    private val mangaContentListFlow = MutableStateFlow<ArtworkContentList?>(null)
     private val activeAccountFlow = MutableStateFlow<OauthUserPublic?>(null)
 
     private val iLLustRepo = mockk<CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList>>(relaxed = true)
+    private val mangaRepo = mockk<CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList>>(relaxed = true)
     private val oAuthUserRepository = mockk<OAuthUserRepository>(relaxed = true)
     private val activeAccountId = 1001L
 
     @BeforeEach
     fun setUp() {
         every { iLLustRepo.contentList } returns contentListFlow
+        every { mangaRepo.contentList } returns mangaContentListFlow
         every { oAuthUserRepository.observeActiveAccount() } returns activeAccountFlow
     }
 
@@ -51,6 +54,7 @@ class HomeViewModelTest {
     ): HomeViewModel {
         return HomeViewModel(
             iLLustRepo = iLLustRepo,
+            mangaRepo = mangaRepo,
             oAuthUserRepository = userRepo,
             ioDispatcher = testDispatcher
         )
@@ -299,6 +303,244 @@ class HomeViewModelTest {
         testScheduler.advanceUntilIdle()
 
         // Assert: Should emit null because getOrNull(99) is null
+        assertNull(collectedArtworks.last())
+
+        job.cancel()
+    }
+
+    // ========================================================================
+    // Active Manga Extraction Tests
+    // ========================================================================
+
+    @Test
+    fun `activeManga emits null when mangaContentList is null`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+        val collectedManga = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.activeManga.collect { collectedManga.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+        assertNull(collectedManga.last())
+
+        job.cancel()
+    }
+
+    @Test
+    fun `activeManga emits correct artwork based on focusedIndex`() = runTest(testDispatcher) {
+        val artwork1 = createMockArtwork(id = 10L)
+        val artwork2 = createMockArtwork(id = 20L)
+        val artwork3 = createMockArtwork(id = 30L)
+
+        val viewModel = createViewModel()
+        val collectedManga = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.activeManga.collect { collectedManga.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+
+        // Act: Emit content with focusedIndex = 1
+        mangaContentListFlow.value = ArtworkContentList(
+            artworkList = listOf(artwork1, artwork2, artwork3),
+            nextUrl = "",
+            focusedIndex = 1
+        )
+
+        testScheduler.advanceUntilIdle()
+
+        // Assert: Should emit artwork2 (index 1)
+        assertEquals(artwork2, collectedManga.last())
+
+        job.cancel()
+    }
+
+    @Test
+    fun `activeManga updates when focusedIndex changes`() = runTest(testDispatcher) {
+        val artwork1 = createMockArtwork(id = 10L)
+        val artwork2 = createMockArtwork(id = 20L)
+
+        val viewModel = createViewModel()
+        val collectedManga = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.activeManga.collect { collectedManga.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+
+        // Emit with focusedIndex = 0
+        mangaContentListFlow.value = ArtworkContentList(
+            artworkList = listOf(artwork1, artwork2),
+            nextUrl = "",
+            focusedIndex = 0
+        )
+        testScheduler.advanceUntilIdle()
+        assertEquals(artwork1, collectedManga.last())
+
+        // Update with focusedIndex = 1
+        mangaContentListFlow.value = ArtworkContentList(
+            artworkList = listOf(artwork1, artwork2),
+            nextUrl = "",
+            focusedIndex = 1
+        )
+        testScheduler.advanceUntilIdle()
+        assertEquals(artwork2, collectedManga.last())
+
+        job.cancel()
+    }
+
+    @Test
+    fun `activeManga emits null when focusedIndex is out of bounds`() = runTest(testDispatcher) {
+        val artwork1 = createMockArtwork(id = 10L)
+
+        val viewModel = createViewModel()
+        val collectedManga = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.activeManga.collect { collectedManga.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+
+        // Act: Emit content with focusedIndex = 99 (out of bounds)
+        mangaContentListFlow.value = ArtworkContentList(
+            artworkList = listOf(artwork1),
+            nextUrl = "",
+            focusedIndex = 99
+        )
+
+        testScheduler.advanceUntilIdle()
+
+        // Assert: Should emit null because getOrNull(99) is null
+        assertNull(collectedManga.last())
+
+        job.cancel()
+    }
+
+    @Test
+    fun `activeManga emits null when artworkList is empty`() = runTest(testDispatcher) {
+        val viewModel = createViewModel()
+        val collectedManga = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.activeManga.collect { collectedManga.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+
+        // Act: Emit content with empty list
+        mangaContentListFlow.value = ArtworkContentList(
+            artworkList = emptyList(),
+            nextUrl = "",
+            focusedIndex = 0
+        )
+
+        testScheduler.advanceUntilIdle()
+
+        // Assert: Should emit null
+        assertNull(collectedManga.last())
+
+        job.cancel()
+    }
+
+    // ========================================================================
+    // Current Active Artwork Switching Tests
+    // ========================================================================
+
+    @Test
+    fun `currentActiveArtwork emits activeArtwork when destination is ILLust`() = runTest(testDispatcher) {
+        val illustArtwork = createMockArtwork(id = 100L)
+        val mangaArtwork = createMockArtwork(id = 200L)
+
+        contentListFlow.value = ArtworkContentList(
+            artworkList = listOf(illustArtwork),
+            nextUrl = "",
+            focusedIndex = 0
+        )
+        mangaContentListFlow.value = ArtworkContentList(
+            artworkList = listOf(mangaArtwork),
+            nextUrl = "",
+            focusedIndex = 0
+        )
+
+        val viewModel = createViewModel()
+        val collectedArtworks = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.currentActiveArtwork.collect { collectedArtworks.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+
+        // By default destination is ILLust -> should emit illustArtwork
+        assertEquals(illustArtwork, collectedArtworks.last())
+
+        job.cancel()
+    }
+
+    @Test
+    fun `currentActiveArtwork switches to activeManga when destination changes to Manga`() = runTest(testDispatcher) {
+        val illustArtwork = createMockArtwork(id = 100L)
+        val mangaArtwork = createMockArtwork(id = 200L)
+
+        contentListFlow.value = ArtworkContentList(
+            artworkList = listOf(illustArtwork),
+            nextUrl = "",
+            focusedIndex = 0
+        )
+        mangaContentListFlow.value = ArtworkContentList(
+            artworkList = listOf(mangaArtwork),
+            nextUrl = "",
+            focusedIndex = 0
+        )
+
+        val viewModel = createViewModel()
+        val collectedArtworks = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.currentActiveArtwork.collect { collectedArtworks.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+        assertEquals(illustArtwork, collectedArtworks.last())
+
+        // Switch destination to Manga
+        viewModel.action(HomeScreenAction.NewUiMode(NavOptions.Manga))
+        testScheduler.advanceUntilIdle()
+
+        // Should now emit mangaArtwork
+        assertEquals(mangaArtwork, collectedArtworks.last())
+
+        job.cancel()
+    }
+
+    @Test
+    fun `currentActiveArtwork emits null when destination is Novel`() = runTest(testDispatcher) {
+        val illustArtwork = createMockArtwork(id = 100L)
+
+        contentListFlow.value = ArtworkContentList(
+            artworkList = listOf(illustArtwork),
+            nextUrl = "",
+            focusedIndex = 0
+        )
+
+        val viewModel = createViewModel()
+        val collectedArtworks = mutableListOf<Artwork?>()
+
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.currentActiveArtwork.collect { collectedArtworks.add(it) }
+        }
+
+        testScheduler.advanceUntilIdle()
+        assertEquals(illustArtwork, collectedArtworks.last())
+
+        // Switch to Novel
+        viewModel.action(HomeScreenAction.NewUiMode(NavOptions.Novel))
+        testScheduler.advanceUntilIdle()
+
         assertNull(collectedArtworks.last())
 
         job.cancel()
