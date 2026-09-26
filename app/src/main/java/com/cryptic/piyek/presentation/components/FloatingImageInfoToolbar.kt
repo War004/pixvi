@@ -1,4 +1,4 @@
-package com.cryptic.piyek.components
+package com.cryptic.piyek.presentation.components
 
 import com.cryptic.piyek.core.content.data.model.Artwork
 import android.content.ClipData

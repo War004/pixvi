@@ -38,6 +38,8 @@ import com.cryptic.piyek.feature.iLLust.presentation.home.HomeILLustUiState
 import com.cryptic.piyek.feature.iLLust.presentation.home.HomeILLustViewModel
 import com.cryptic.piyek.feature.manga.presentation.HomeMangaScreen
 import com.cryptic.piyek.feature.manga.presentation.HomeMangaViewModel
+import com.cryptic.piyek.feature.novel.presentation.HomeNovelScreen
+import com.cryptic.piyek.feature.novel.presentation.HomeNovelViewModel
 import com.cryptic.piyek.feature.onboarding.presentation.OnboardingScreen
 import com.cryptic.piyek.feature.onboarding.presentation.OnboardingViewModel
 import com.cryptic.piyek.ui.theme.PiYekTheme
@@ -141,6 +143,17 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 )
+                                val novelMangaVIewModel: HomeNovelViewModel by viewModels(
+                                    factoryProducer = {
+                                        viewModelFactory {
+                                            initializer {
+                                                HomeNovelViewModel(
+                                                    novelRepo = app.container.novelRepo
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
                                 HomeRoute(
                                     homeViewModel = homeVIewModel,
                                     iLLustHomeScreen = {
@@ -151,6 +164,11 @@ class MainActivity : ComponentActivity() {
                                     mangaHomeScreen = {
                                         HomeMangaScreen(
                                             homeMangaViewModel
+                                        )
+                                    },
+                                    novelHomeScreen = {
+                                        HomeNovelScreen(
+                                            novelMangaVIewModel
                                         )
                                     }
                                 )

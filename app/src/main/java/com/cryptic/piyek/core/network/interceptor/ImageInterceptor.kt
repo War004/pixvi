@@ -6,17 +6,13 @@ import okhttp3.Response
 
 class ImageInterceptor(
     private val appConfig: AppConfig
-):Interceptor {
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        val originalRequest = chain.request()
-
-        val requestBuilder = originalRequest.newBuilder()
-            .header("Accept-Encoding","gzip")
-            .header("Connection","Keep-Alive")
-            //.header("Host","i.pximg.net")
+        val request = chain.request().newBuilder()
             .header("User-Agent", appConfig.getUserAgent())
             .header("Referer", appConfig.getRefererUrl())
+            .build()
 
-        return chain.proceed(requestBuilder.build())
+        return chain.proceed(request)
     }
 }

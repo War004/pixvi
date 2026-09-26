@@ -24,7 +24,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -40,7 +39,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -51,15 +49,14 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cryptic.piyek.R
-import com.cryptic.piyek.components.FloatingImageInfoToolbar
-import com.cryptic.piyek.components.NavigationMenu
-import com.cryptic.piyek.components.SearchBar
-import com.cryptic.piyek.components.VerticalHomeNavigator
+import com.cryptic.piyek.presentation.components.FloatingImageInfoToolbar
+import com.cryptic.piyek.presentation.components.NavigationMenu
+import com.cryptic.piyek.presentation.components.SearchBar
+import com.cryptic.piyek.presentation.components.VerticalHomeNavigator
 import com.cryptic.piyek.core.content.data.model.Artwork
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
@@ -69,8 +66,8 @@ fun HomeRoute(
     homeViewModel: HomeViewModel,
     iLLustHomeScreen: @Composable () -> Unit,
     mangaHomeScreen: @Composable () -> Unit,
+    novelHomeScreen: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    //novelHomeViewModel: @Composable () -> Unit,
     //backStack: Any,
 ) {
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
@@ -83,6 +80,7 @@ fun HomeRoute(
         onAction = homeViewModel::action,
         iLLustHomeScreen = iLLustHomeScreen,
         mangaHomeScreen = mangaHomeScreen,
+        novelHomeScreen = novelHomeScreen,
         modifier = modifier
     )
 }
@@ -96,6 +94,7 @@ fun HomeScreen(
     onAction: (HomeScreenAction) -> Unit,
     iLLustHomeScreen: @Composable () -> Unit,
     mangaHomeScreen: @Composable () -> Unit,
+    novelHomeScreen: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val saveableStateHolder = rememberSaveableStateHolder()
@@ -181,7 +180,8 @@ fun HomeScreen(
                         activeArtwork = activeArtwork,
                         saveableStateHolder = saveableStateHolder,
                         iLLustHomeScreen = iLLustHomeScreen,
-                        mangaHomeScreen = mangaHomeScreen
+                        mangaHomeScreen = mangaHomeScreen,
+                        novelHomeScreen = novelHomeScreen
                     )
                 }
 
@@ -274,13 +274,14 @@ private fun HomeDestinationHost(
     saveableStateHolder: SaveableStateHolder,
     iLLustHomeScreen: @Composable () -> Unit,
     mangaHomeScreen: @Composable () -> Unit,
+    novelHomeScreen: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         saveableStateHolder.SaveableStateProvider(key = currentDestination::class.java.simpleName) {
             when (currentDestination) {
                 is NavOptions.Novel -> {
-                    Text("This should be the novel screen!")
+                    novelHomeScreen()
                 }
                 else -> {
                     when (currentDestination) {

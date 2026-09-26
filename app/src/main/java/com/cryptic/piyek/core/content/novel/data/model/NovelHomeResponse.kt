@@ -83,9 +83,9 @@ data class NovelUser(
 @Serializable
 data class NovelSeries(
     @SerialName("id")
-    val id: Long,
+    val id: Long? = null,
     @SerialName("title")
-    val title: String
+    val title: String? = null
 )
 
 @Serializable
@@ -192,8 +192,8 @@ fun ImageUrls?.toDomain(): NovelImageQuality {
 
 fun NovelSeries.toDomain(): NovelSeriesDomain {
     return NovelSeriesDomain(
-        id = this.id,
-        title = this.title
+        id = this.id ?: 0L,
+        title = this.title.orEmpty()
     )
 }
 

@@ -32,6 +32,12 @@ android {
                 "proguard-rules.pro"
             )
         }
+
+        create("profile") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -115,4 +121,5 @@ dependencies {
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
+    implementation(libs.androidx.compose.runtime.tracing)
 }

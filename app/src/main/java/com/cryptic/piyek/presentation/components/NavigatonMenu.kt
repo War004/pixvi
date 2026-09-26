@@ -1,4 +1,4 @@
-package com.cryptic.piyek.components
+package com.cryptic.piyek.presentation.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.PersonAddAlt1
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Collections
@@ -43,7 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.cryptic.piyek.feature.home.presentation.CurrentAccount
 import com.example.app.feature.main.presentation.components.NavigationMenuItem

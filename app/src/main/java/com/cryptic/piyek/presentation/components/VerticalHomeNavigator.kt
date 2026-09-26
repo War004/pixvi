@@ -1,4 +1,4 @@
-package com.cryptic.piyek.components
+package com.cryptic.piyek.presentation.components
 
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState

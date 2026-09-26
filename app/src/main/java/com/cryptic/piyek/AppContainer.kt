@@ -26,11 +26,20 @@ import com.cryptic.piyek.feature.onboarding.domain.usecase.OAuthIntentProcessor
 import com.cryptic.piyek.core.auth.SessionManager
 import com.cryptic.piyek.core.content.data.model.ArtworkContentList
 import com.cryptic.piyek.core.content.data.model.RecommendationNonNovelPara
+import com.cryptic.piyek.core.content.data.model.RecommendationNovelPara
 import com.cryptic.piyek.core.content.domain.repo.CoreContentApiRepo
 import com.cryptic.piyek.core.content.illust.data.remote.ILLustApiService
 import com.cryptic.piyek.core.content.illust.data.repo.ILLustApiRepoImpl
 import com.cryptic.piyek.core.content.manga.data.remote.MangaApiService
 import com.cryptic.piyek.core.content.manga.data.repo.MangaApiRepoImpl
+import com.cryptic.piyek.core.content.novel.data.remote.NovelApiService
+import com.cryptic.piyek.core.content.novel.data.repo.NovelApiRepoImpl
+import com.cryptic.piyek.core.content.novel.domain.model.NovelHome
+import com.cryptic.piyek.core.image.blur.BlurConfig
+import com.cryptic.piyek.core.image.blur.ImageBlurManager
+import com.cryptic.piyek.data.image.BlurredImageRepositoryImpl
+import com.cryptic.piyek.domain.image.BlurredImageRepository
+import com.cryptic.piyek.domain.image.GetBlurredImageUseCase
 import com.cryptic.piyek.feature.onboarding.data.remote.PixivWalkThroughApiService
 import com.cryptic.piyek.feature.onboarding.data.repo.WalkthroughRepoImpl
 import com.cryptic.piyek.feature.onboarding.domain.repo.WalkthroughRepo
@@ -145,6 +154,8 @@ class AppContainer(
 
     val imageLoader by lazy {
         ImageLoader.Builder(application)
+            .fetcherCoroutineContext(kotlinx.coroutines.Dispatchers.IO.limitedParallelism(4))
+            .decoderCoroutineContext(kotlinx.coroutines.Dispatchers.Default.limitedParallelism(2))
             .components { add(
                 OkHttpNetworkFetcherFactory(
                     callFactory = {
@@ -174,8 +185,16 @@ class AppContainer(
         piyekRetrofit.create(MangaApiService::class.java)
     }
 
+    val novelApi: NovelApiService by lazy {
+        piyekRetrofit.create(NovelApiService::class.java)
+    }
+
     val mangaRepo: CoreContentApiRepo<ArtworkContentList, RecommendationNonNovelPara, ArtworkContentList> by lazy {
         MangaApiRepoImpl(mangaApi)
+    }
+
+    val novelRepo: CoreContentApiRepo<NovelHome, RecommendationNovelPara, NovelHome> by lazy {
+        NovelApiRepoImpl(novelApi)
     }
 
     val walkthroughRepo: WalkthroughRepo by lazy {
@@ -219,5 +238,25 @@ class AppContainer(
             appConfig = appConfig,
             applicationScope = applicationScope
         )
+    }
+
+    val imageBlurManager: ImageBlurManager by lazy {
+        ImageBlurManager(
+            config = BlurConfig(radius = 4, passes = 2)
+        )
+    }
+    val blurredImageRepository: BlurredImageRepository by lazy {
+        BlurredImageRepositoryImpl(
+            context = application.applicationContext,
+            imageLoader = imageLoader,
+            workspacePool = imageBlurManager.workspacePool,
+            singleFlight = imageBlurManager.singleFlight,
+            lruCache = imageBlurManager.lruCache,
+            engine = imageBlurManager.engine
+        )
+    }
+
+    val getBlurredImageUseCase: GetBlurredImageUseCase by lazy {
+        GetBlurredImageUseCase(blurredImageRepository)
     }
 }
