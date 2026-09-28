@@ -2,6 +2,7 @@ package com.cryptic.piyek.core.content.presentation
 
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -327,14 +328,15 @@ fun CarouselItemScope.CarouselArtworkItem(
 ) {
     Box(
         modifier = modifier
-            .fillMaxHeight()
+            .fillMaxSize()
             .maskClip(MaterialTheme.shapes.extraLarge)
             .clickable { onItemClick() },
     ) {
         AsyncImage(
-            model = artwork.quality.firstPage.medium,
+            model = artwork.quality.firstPage.high,
             contentDescription = artwork.title,
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
         )
 
         Text(
