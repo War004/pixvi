@@ -12,25 +12,62 @@ import com.cryptic.piyek.core.data.local.BookmarkRestrict
 import com.cryptic.piyek.core.network.NetworkResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.cryptic.piyek.core.domain.error.Result
+import com.cryptic.piyek.history.novel.domain.repository.NovelHistoryRepository
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 class NovelApiRepoImpl(
-    private val novelApiService: NovelApiService
+    private val novelApiService: NovelApiService,
+    private val novelHistoryRepo: NovelHistoryRepository
 ): CoreContentApiRepo<NovelHome, RecommendationNovelPara, NovelHome>{
 
     private val _contentList = MutableStateFlow<NovelHome?>(null)
     override val contentList: StateFlow<NovelHome?> = _contentList.asStateFlow()
 
     override suspend fun getRecommendation(parameters: RecommendationNovelPara): CResponse<Unit> {
+        val browsingHistory = when (val res = novelHistoryRepo.getLatestBrowsingRequestBody()) {
+            is Result.Success -> res.data
+            is Result.Error -> emptyList()
+        }
+        val finishedHistory = when (val res = novelHistoryRepo.getLatestFinishedRequestBody()) {
+            is Result.Success -> res.data
+            is Result.Error -> emptyList()
+        }
+
+        val readNovelIds = if (parameters.readNovelIds.isNotEmpty()) {
+            parameters.readNovelIds.map { it.toString() }
+        } else {
+            finishedHistory.map { it.novelId.toString() }
+        }
+
+        val readNovelDateTimes = if (parameters.readNovelDateTimes.isNotEmpty()) {
+            parameters.readNovelDateTimes
+        } else {
+            finishedHistory.map { it.dateTime }
+        }
+
+        val viewNovelIds = if (parameters.viewNovelIds.isNotEmpty()) {
+            parameters.viewNovelIds.map { it.toString() }
+        } else {
+            browsingHistory.map { it.novelId.toString() }
+        }
+
+        val viewNovelDateTimes = if (parameters.viewNovelDataTimes.isNotEmpty()) {
+            parameters.viewNovelDataTimes
+        } else {
+            browsingHistory.map { it.dateTime }
+        }
+
         val response = novelApiService.getRecommendation(
             wantsRanking = parameters.includeRanking,
             includePrivacyPolicy = parameters.includePrivacyPolicy,
-            readNovelIds = parameters.readNovelIds.map { it.toString() },
-            readNovelDateTimes = parameters.readNovelDateTimes,
-            viewNovelIds = parameters.readNovelIds.map { it.toString() },
-            viewNovelDateTimes = parameters.viewNovelDataTimes
+            readNovelIds = readNovelIds,
+            readNovelDateTimes = readNovelDateTimes,
+            viewNovelIds = viewNovelIds,
+            viewNovelDateTimes = viewNovelDateTimes
         )
+
 
         return when(response){
             is NetworkResult.Success -> {

@@ -20,6 +20,9 @@ import com.cryptic.piyek.core.auth.data.remote.OAuthApiService
 import com.cryptic.piyek.core.auth.data.repository.OAuthUserRepositoryImpl
 import com.cryptic.piyek.core.auth.domain.repository.OAuthUserRepository
 import com.cryptic.piyek.core.database.dataStore
+import com.cryptic.piyek.history.novel.data.local.db.NovelHistoryDao
+import com.cryptic.piyek.history.novel.data.local.repo.NovelHistoryRepositoryImpl
+import com.cryptic.piyek.history.novel.domain.repository.NovelHistoryRepository
 import com.cryptic.piyek.core.network.interceptor.AuthInterceptor
 import com.cryptic.piyek.core.network.interceptor.ImageInterceptor
 import com.cryptic.piyek.feature.onboarding.domain.usecase.OAuthIntentProcessor
@@ -75,6 +78,14 @@ class AppContainer(
 
     private val oAuthUserDao: OAuthUserDao by lazy {
         database.oAuthUserDao()
+    }
+
+    private val novelHistoryDao: NovelHistoryDao by lazy {
+        database.novelHistoryDao()
+    }
+
+    val novelHistoryRepo: NovelHistoryRepository by lazy {
+        NovelHistoryRepositoryImpl(novelHistoryDao)
     }
 
     private val oauthOkHttpClient = OkHttpClient.Builder()
@@ -194,7 +205,10 @@ class AppContainer(
     }
 
     val novelRepo: CoreContentApiRepo<NovelHome, RecommendationNovelPara, NovelHome> by lazy {
-        NovelApiRepoImpl(novelApi)
+        NovelApiRepoImpl(
+            novelApiService = novelApi,
+            novelHistoryRepo = novelHistoryRepo
+        )
     }
 
     val walkthroughRepo: WalkthroughRepo by lazy {
